@@ -17,7 +17,7 @@ export const useAuthStore = create(persist((set) => {
         if (error) {
           throw new Error(error.message);
         } else {
-          console.log("Login successful:", data.user);
+          // console.log("Login successful:", data.user);
           set({ isAuthenticated: true, user: data.user });
           // return the user object so callers can redirect based on role
           return data.user;

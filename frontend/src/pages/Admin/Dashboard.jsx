@@ -15,10 +15,10 @@ import {
   UserPlus2,
   Clock,
 } from "lucide-react";
-import WelcomeBanner from "../components/WelcomeBanner";
-import { useAdminStore } from "../store/adminStore";
-import { useUserProfile } from "../hooks/useUserProfile";
-import { api } from "../utils/api";
+import WelcomeBanner from "../../components/WelcomeBanner";
+import { useAdminStore } from "../../store/adminStore";
+import { useUserProfile } from "../../hooks/useUserProfile";
+import { api } from "../../utils/api";
 
 const Dashboard = () => {
   const { users, fetchUsers, isLoading, adminError } = useAdminStore();
@@ -89,30 +89,6 @@ const Dashboard = () => {
     { id: "help", label: "Help & Support", icon: <HelpCircle size={20} /> },
   ];
 
-
-  // 2. Add User Function
-  // const handleAddUser = async (e) => {
-  //   e.preventDefault();
-  //   try {
-  //     const response = await fetch("/add_users", {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify(formData),
-  //     });
-
-  //     if (response.ok) {
-  //       // Refresh list to show new user and update counts
-  //       fetchUsers();
-  //       setFormData({ ...formData, name: "" }); // Reset name field only
-  //       alert(`${formData.role} added successfully!`);
-  //     } else {
-  //       alert("Failed to add user.");
-  //     }
-  //   } catch (err) {
-  //     console.error(err);
-  //     alert("Error connecting to server.");
-  //   }
-  // };
 
   return (
     <div className="transition-all duration-300 p-4 overflow-auto w-full">

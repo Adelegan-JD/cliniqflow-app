@@ -7,9 +7,9 @@ import {
   HelpCircle,
   FileText,
 } from "lucide-react";
-import { useAdminStore } from "../store/adminStore";
-import { useUserProfile } from "../hooks/useUserProfile";
-import Sidebar from "../components/Sidebar";
+import { useAdminStore } from "../../store/adminStore";
+import { useUserProfile } from "../../hooks/useUserProfile";
+import Sidebar from "../Sidebar";
 
 export default function Layout() {
   const { adminError } = useAdminStore();

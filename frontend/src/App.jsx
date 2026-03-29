@@ -1,4 +1,4 @@
-import NurseDashboard from "./pages/NurseDashboard";
+// import NurseDashboard from "./pages/NurseDashboard";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
@@ -9,25 +9,27 @@ import {
   Outlet,
   useLocation,
 } from "react-router-dom";
-import { LoginPage } from "./pages/LoginPage";
+import { LoginPage } from "./pages/Authentication/LoginPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import Dashboard from "./pages/Dashboard";
-import Layout from "./components/Layout";
+import Dashboard from "./pages/Admin/Dashboard";
+import Layout from "./components/Layouts/AdminLayout";
 import Home from "./pages/Home";
-import RecordOfficerDasboard from "./pages/RecordOfficerDasboard";
-import DoctorsDashboard from "./pages/DoctorsDashboard";
+// import RecordOfficerDasboard from "./pages/RecordOfficerDasboard";
+// import DoctorsDashboard from "./pages/DoctorsDashboard";
 import { Users } from "./pages/Admin/Users";
 import { Records } from "./pages/Admin/Records";
 import { Settings } from "./pages/Admin/Settings";
 import { Help } from "./pages/Admin/Help";
+import NurseLayout from "./components/Layouts/NurseLayout";
+import { NurseDashboard } from "./pages/Nurse/NurseDashboard";
 
 // Role-based redirect mapping
 const getRoleBasedRoute = (role) => {
   const roleRoutes = {
     admin: "/dashboard",
-    nurse: "/nurse-dashboard",
-    record_officer: "/record-officer",
-    doctor: "/doctor-dashboard",
+    // nurse: "/nurse-dashboard",
+    // record_officer: "/record-officer",
+    // doctor: "/doctor-dashboard",
   };
   return roleRoutes[role] || "/";
 };
@@ -74,7 +76,7 @@ function App() {
       );
 
     const userRole = user?.user_metadata?.role;
-    
+
     if (!allowedRoles.includes(userRole)) {
       const redirectUrl = getRoleBasedRoute(userRole);
       return <Navigate to={redirectUrl} replace />;
@@ -130,11 +132,21 @@ function App() {
               path="/nurse-dashboard"
               element={
                 <RoleProtectedRoute allowedRoles={["nurse"]}>
+                  <NurseLayout />
+                </RoleProtectedRoute>
+              }
+            >
+              <Route index element={<NurseDashboard />} />
+            </Route>
+            {/* <Route
+              path="/nurse-dashboard"
+              element={
+                <RoleProtectedRoute allowedRoles={["nurse"]}>
                   <NurseDashboard />
                 </RoleProtectedRoute>
               }
-            />
-            <Route
+            /> */}
+            {/* <Route
               path="/record-officer"
               element={
                 <RoleProtectedRoute allowedRoles={["record_officer"]}>
@@ -149,7 +161,7 @@ function App() {
                   <DoctorsDashboard />
                 </RoleProtectedRoute>
               }
-            />
+            /> */}
           </Route>
         </Routes>
       </BrowserRouter>
