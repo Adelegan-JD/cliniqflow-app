@@ -22,12 +22,13 @@ import { Settings } from "./pages/Admin/Settings";
 import { Help } from "./pages/Admin/Help";
 import NurseLayout from "./components/Layouts/NurseLayout";
 import { NurseDashboard } from "./pages/Nurse/NurseDashboard";
+import { NurseHelp } from "./pages/Nurse/Help";
 
 // Role-based redirect mapping
 const getRoleBasedRoute = (role) => {
   const roleRoutes = {
     admin: "/dashboard",
-    // nurse: "/nurse-dashboard",
+    nurse: "/nurse-dashboard",
     // record_officer: "/record-officer",
     // doctor: "/doctor-dashboard",
   };
@@ -137,6 +138,7 @@ function App() {
               }
             >
               <Route index element={<NurseDashboard />} />
+              <Route path="/nurse-dashboard/help" element={<NurseHelp />} />
             </Route>
             {/* <Route
               path="/nurse-dashboard"

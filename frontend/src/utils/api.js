@@ -1,7 +1,7 @@
 import { getToken } from "./uitils";
 
 // Use relative URLs so Vite proxies to backend (avoids CORS)
-const apiUrl = "";
+const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const api = {
   post: async function (endpoint, payload) {
