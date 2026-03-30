@@ -23,6 +23,9 @@ import { Help } from "./pages/Admin/Help";
 import NurseLayout from "./components/Layouts/NurseLayout";
 import { NurseDashboard } from "./pages/Nurse/NurseDashboard";
 import { NurseHelp } from "./pages/Nurse/Help";
+import RecordOfficerLayout from "./components/Layouts/RecordOfficerLayout";
+import RecordOfficerHelp from "./pages/RecordOfficers/RecordOfficerHelp";
+import RecordOfficerDashboard from "./pages/RecordOfficers/Dashboard";
 
 // Role-based redirect mapping
 const getRoleBasedRoute = (role) => {
@@ -113,6 +116,8 @@ function App() {
             }
           />
           <Route path="/" element={<Home />} />
+
+          {/* Admin Route */}
           <Route element={<ProtectedRoute />}>
             <Route
               path="/dashboard"
@@ -129,6 +134,9 @@ function App() {
               <Route path="/dashboard/help" element={<Help />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Route>
+
+
+            {/* nurse route */}
             <Route
               path="/nurse-dashboard"
               element={
@@ -140,30 +148,19 @@ function App() {
               <Route index element={<NurseDashboard />} />
               <Route path="/nurse-dashboard/help" element={<NurseHelp />} />
             </Route>
-            {/* <Route
-              path="/nurse-dashboard"
-              element={
-                <RoleProtectedRoute allowedRoles={["nurse"]}>
-                  <NurseDashboard />
-                </RoleProtectedRoute>
-              }
-            /> */}
-            {/* <Route
+
+            {/* record officer route */}
+            <Route
               path="/record-officer"
               element={
                 <RoleProtectedRoute allowedRoles={["record_officer"]}>
-                  <RecordOfficerDasboard />
+                  <RecordOfficerLayout />
                 </RoleProtectedRoute>
               }
-            />
-            <Route
-              path="/doctor-dashboard/*"
-              element={
-                <RoleProtectedRoute allowedRoles={["doctor"]}>
-                  <DoctorsDashboard />
-                </RoleProtectedRoute>
-              }
-            /> */}
+            >
+              <Route index element={<RecordOfficerDashboard />} />
+              <Route path="/record-officer/help" element={<RecordOfficerHelp />} />
+            </Route>
           </Route>
         </Routes>
       </BrowserRouter>
