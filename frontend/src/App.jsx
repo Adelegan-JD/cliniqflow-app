@@ -13,6 +13,11 @@ import { LoginPage } from "./pages/Authentication/LoginPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Dashboard from "./pages/Admin/Dashboard";
 import Layout from "./components/Layouts/AdminLayout";
+import DoctorsLayout from "./components/Layouts/DoctorsLayout";
+import DoctorsDashboard from "./pages/Doctor/DoctorsDashboard";
+import PatientsQueue from "./pages/Doctor/PatientsQueue";
+import RecordingSession from "./pages/Doctor/RecordingSession";
+import Soap from "./pages/Doctor/Soap";
 import Home from "./pages/Home";
 // import RecordOfficerDasboard from "./pages/RecordOfficerDasboard";
 // import DoctorsDashboard from "./pages/DoctorsDashboard";
@@ -30,7 +35,7 @@ const getRoleBasedRoute = (role) => {
     admin: "/dashboard",
     nurse: "/nurse-dashboard",
     // record_officer: "/record-officer",
-    // doctor: "/doctor-dashboard",
+    doctor: "/doctors-dashboard",
   };
   return roleRoutes[role] || "/";
 };
@@ -53,7 +58,7 @@ function App() {
     if (role && role !== "admin") {
       let dest = "/dashboard"; // fallback
       if (role === "nurse") dest = "/nurse-dashboard";
-      else if (role === "doctor") dest = "/doctor-dashboard";
+      else if (role === "doctor") dest = "/doctors-dashboard";
       else if (role === "record_officer" || role === "record officer")
         dest = "/record-officer";
       const path = location.pathname;
@@ -129,6 +134,7 @@ function App() {
               <Route path="/dashboard/help" element={<Help />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Route>
+            {/* Nurses  */}
             <Route
               path="/nurse-dashboard"
               element={
@@ -140,30 +146,32 @@ function App() {
               <Route index element={<NurseDashboard />} />
               <Route path="/nurse-dashboard/help" element={<NurseHelp />} />
             </Route>
-            {/* <Route
-              path="/nurse-dashboard"
-              element={
-                <RoleProtectedRoute allowedRoles={["nurse"]}>
-                  <NurseDashboard />
-                </RoleProtectedRoute>
-              }
-            /> */}
-            {/* <Route
-              path="/record-officer"
-              element={
-                <RoleProtectedRoute allowedRoles={["record_officer"]}>
-                  <RecordOfficerDasboard />
-                </RoleProtectedRoute>
-              }
-            />
             <Route
-              path="/doctor-dashboard/*"
+              path="/doctors-dashboard"
               element={
                 <RoleProtectedRoute allowedRoles={["doctor"]}>
-                  <DoctorsDashboard />
+                  <DoctorsLayout />
                 </RoleProtectedRoute>
               }
-            /> */}
+            >
+              <Route index element={<DoctorsDashboard />} />
+              <Route
+                path="/doctors-dashboard/patients_queue"
+                element={<PatientsQueue />}
+              />
+              <Route
+                path="/doctors-dashboard/recording-session/:patientId/:sessionId"
+                element={<RecordingSession />}
+              />
+              <Route
+                path="/doctors-dashboard/soap/:patientId/:sessionId"
+                element={<Soap />}
+              />
+              <Route
+                path="*"
+                element={<Navigate to="/doctors-dashboard" replace />}
+              />
+            </Route>
           </Route>
         </Routes>
       </BrowserRouter>
