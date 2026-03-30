@@ -30,7 +30,7 @@ const LoginForm = () => {
           navigate("/nurse-dashboard", { replace: true });
           break;
         case "doctor":
-          navigate("/doctor-dashboard", { replace: true });
+          navigate("/doctors-dashboard", { replace: true });
           break;
         case "record_officer":
         case "record officer":
