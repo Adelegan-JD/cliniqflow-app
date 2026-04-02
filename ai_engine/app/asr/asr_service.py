@@ -1,14 +1,5 @@
-"""
-asr/asr_service.py
--------------------
-ASRService class — thin wrapper around the engine functions.
-Receives a ModelManager instance so it has zero dependency on main.py.
-
-Import chain:  asr_engine  <--  asr_service  <--  api/asr.py  <--  main.py
-"""
-
 import numpy as np
-from asr.asr_engine import (
+from app.asr.asr_engine import (
     ModelManager,
     diarize_and_transcribe,
     format_conversation,

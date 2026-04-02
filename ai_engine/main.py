@@ -1,6 +1,9 @@
+import os as os
+import torch
 
+# This helps Python find the torch binaries if they are hidden
+os.add_dll_directory(os.path.join(os.environ['VIRTUAL_ENV'], 'Lib', 'site-packages', 'torch', 'lib'))
 
-# ── MUST be first import — runs all torchaudio/pyannote patches ───────────────
 from app.asr.asr_engine import (
     ModelManager,
     download_model_if_needed,

@@ -1,37 +1,26 @@
-"""
-asr/asr_engine.py
-------------------
-All torchaudio/pyannote compatibility patches, the ModelManager class,
-and the two core processing functions: diarize_and_transcribe + format_conversation.
-
-This is the single source of truth for ASR logic.
-Import chain:  asr_engine  <--  asr_service  <--  api/asr.py  <--  main.py
-"""
-
-# ── Compatibility patches (must run before any torch/pyannote imports) ─────────
 
 import torchaudio
 import soundfile as _sf
-import numpy as _np
 
-if not hasattr(torchaudio, 'list_audio_backends'):
-    torchaudio.list_audio_backends = lambda: ["soundfile"]
-
-if not hasattr(torchaudio, 'set_audio_backend'):
-    torchaudio.set_audio_backend = lambda x: None
-
+# Patch 1 — AudioMetaData (dropped in newer torchaudio, still used by pyannote)
 if not hasattr(torchaudio, 'AudioMetaData'):
     from dataclasses import dataclass
     @dataclass
-    class AudioMetaData:
-        sample_rate: int = 0
-        num_channels: int = 0
-        num_frames: int = 0
+    class _AudioMetaData:
+        sample_rate:     int = 0
+        num_channels:    int = 0
+        num_frames:      int = 0
         bits_per_sample: int = 0
-        encoding: str = ""
-    torchaudio.AudioMetaData = AudioMetaData
+        encoding:        str = ""
+    torchaudio.AudioMetaData = _AudioMetaData
 
-def _patched_torchaudio_info(filepath, *args, **kwargs):
+# Patch 2 — torchaudio.info  (uses soundfile instead of ffmpeg/sox)
+if not hasattr(torchaudio, 'list_audio_backends'):
+    torchaudio.list_audio_backends = lambda: ["soundfile"]
+if not hasattr(torchaudio, 'set_audio_backend'):
+    torchaudio.set_audio_backend = lambda x: None
+
+def _info(filepath, *args, **kwargs):
     info = _sf.info(filepath)
     return torchaudio.AudioMetaData(
         sample_rate=info.samplerate,
@@ -40,40 +29,41 @@ def _patched_torchaudio_info(filepath, *args, **kwargs):
         bits_per_sample=16,
         encoding="PCM_S",
     )
-torchaudio.info = _patched_torchaudio_info
+torchaudio.info = _info
 
+# Patch 3 — torchaudio.load  (uses soundfile instead of ffmpeg/sox)
 import torch as _torch
-def _patched_torchaudio_load(filepath, *args, **kwargs):
+def _load(filepath, *args, **kwargs):
     kwargs.pop('backend', None)
     kwargs.pop('normalize', None)
-    data, samplerate = _sf.read(filepath, dtype='float32', always_2d=True)
-    return _torch.from_numpy(data.T), samplerate
-torchaudio.load = _patched_torchaudio_load
+    data, sr = _sf.read(filepath, dtype='float32', always_2d=True)
+    return _torch.from_numpy(data.T), sr
+torchaudio.load = _load
 
+# Patch 4 — torch.load weights_only  (pyannote checkpoints need full pickle)
 import torch
 import lightning_fabric.utilities.cloud_io as _lf_io
 import pytorch_lightning.core.saving as _pl_saving
 
-def _safe_lf_load(path, map_location=None, **kwargs):
+def _safe_load(path, map_location=None, **kwargs):
     kwargs.pop('weights_only', None)
     with open(path, 'rb') as f:
         return torch.load(f, map_location=map_location, weights_only=False)
 
-_lf_io._load = _safe_lf_load
-_pl_saving.pl_load = _safe_lf_load
+_lf_io._load       = _safe_load
+_pl_saving.pl_load = _safe_load
 
-_original_torch_load = torch.load
+_orig_torch_load = torch.load
 def _patched_torch_load(f, *args, **kwargs):
     kwargs['weights_only'] = False
-    return _original_torch_load(f, *args, **kwargs)
+    return _orig_torch_load(f, *args, **kwargs)
 torch.load = _patched_torch_load
 
-# ── Standard imports ───────────────────────────────────────────────────────────
 
 import logging
 import os
 import numpy as np
-
+import torch as torch
 from pyannote.audio import Pipeline as DiarizationPipeline
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 from huggingface_hub import snapshot_download
@@ -117,7 +107,6 @@ def download_model_if_needed() -> str:
     return CACHE_DIR
 
 
-# ── Core processing functions 
 
 def diarize_and_transcribe(audio: np.ndarray, manager: ModelManager) -> list:
     """

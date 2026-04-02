@@ -24,7 +24,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from typing import List
 
-from asr.asr_service import ASRService
+from app.asr.asr_service import ASRService
 
 logger = logging.getLogger(__name__)
 
