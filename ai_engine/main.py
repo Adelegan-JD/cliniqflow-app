@@ -1,15 +1,15 @@
-import os as os
-import torch
+# import os as os
+# import torch
 
-# This helps Python find the torch binaries if they are hidden
-os.add_dll_directory(os.path.join(os.environ['VIRTUAL_ENV'], 'Lib', 'site-packages', 'torch', 'lib'))
+# # This helps Python find the torch binaries if they are hidden
+# os.add_dll_directory(os.path.join(os.environ['VIRTUAL_ENV'], 'Lib', 'site-packages', 'torch', 'lib'))
 
 from app.asr.asr_engine import (
     ModelManager,
     download_model_if_needed,
 )
 
-# ── Standard imports ──────────────────────────────────────────────────────────
+# Standard imports 
 import logging
 import os
 import time
@@ -26,7 +26,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
-# ── API routers ───────────────────────────────────────────────────────────────
+# API routers 
 from app.api.asr_api       import router as asr_router
 
 load_dotenv()
@@ -43,7 +43,7 @@ HF_TOKEN        = os.environ.get("HF_TOKEN")
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:8000").split(",")
 
 
-# ── Lifespan — load models once at startup ────────────────────────────────────
+# load models once at startup 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Server starting up...")
@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
     logger.info("pyannote diarizer loaded ✓")
 
     mm.model_loaded          = True
-    app.state.model_manager  = mm          # <-- shared across all routers
+    app.state.model_manager  = mm         
     logger.info(f"Ready in {round(time.time()-t0, 2)}s")
 
     yield  # server runs here
@@ -115,10 +115,10 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 
 
 # Register routers 
-app.include_router(asr_router,        dependencies=[Depends(verify_api_key)])
+app.include_router(asr_router,dependencies=[Depends(verify_api_key)])
 
 
-# ── Root ──────────────────────────────────────────────────────────────────────
+
 @app.get("/", tags=["Root"])
 async def root():
     return {
