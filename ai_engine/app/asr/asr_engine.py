@@ -1,8 +1,7 @@
-
 import torchaudio
-import soundfile as _sf
+import types
+import torch
 
-# Patch 1 — AudioMetaData (dropped in newer torchaudio, still used by pyannote)
 if not hasattr(torchaudio, 'AudioMetaData'):
     from dataclasses import dataclass
     @dataclass
@@ -14,52 +13,33 @@ if not hasattr(torchaudio, 'AudioMetaData'):
         encoding:        str = ""
     torchaudio.AudioMetaData = _AudioMetaData
 
-# Patch 2 — torchaudio.info  (uses soundfile instead of ffmpeg/sox)
 if not hasattr(torchaudio, 'list_audio_backends'):
     torchaudio.list_audio_backends = lambda: ["soundfile"]
+
 if not hasattr(torchaudio, 'set_audio_backend'):
     torchaudio.set_audio_backend = lambda x: None
 
-def _info(filepath, *args, **kwargs):
-    info = _sf.info(filepath)
-    return torchaudio.AudioMetaData(
-        sample_rate=info.samplerate,
-        num_channels=info.channels,
-        num_frames=info.frames,
-        bits_per_sample=16,
-        encoding="PCM_S",
-    )
-torchaudio.info = _info
-
-# Patch 3 — torchaudio.load  (uses soundfile instead of ffmpeg/sox)
-import torch as _torch
-def _load(filepath, *args, **kwargs):
-    kwargs.pop('backend', None)
-    kwargs.pop('normalize', None)
-    data, sr = _sf.read(filepath, dtype='float32', always_2d=True)
-    return _torch.from_numpy(data.T), sr
-torchaudio.load = _load
-
-# Patch 4 — torch.load weights_only  (pyannote checkpoints need full pickle)
-import torch
-import lightning_fabric.utilities.cloud_io as _lf_io
-import pytorch_lightning.core.saving as _pl_saving
-
-def _safe_load(path, map_location=None, **kwargs):
-    kwargs.pop('weights_only', None)
-    with open(path, 'rb') as f:
-        return torch.load(f, map_location=map_location, weights_only=False)
-
-_lf_io._load       = _safe_load
-_pl_saving.pl_load = _safe_load
+if not hasattr(torchaudio, 'io'):
+    io_module = types.ModuleType('torchaudio.io')
+    class _StreamReader:
+        pass
+    io_module.StreamReader = _StreamReader
+    torchaudio.io = io_module
 
 _orig_torch_load = torch.load
 def _patched_torch_load(f, *args, **kwargs):
     kwargs['weights_only'] = False
     return _orig_torch_load(f, *args, **kwargs)
 torch.load = _patched_torch_load
+# Normal imports — everything else works without patches
+import logging
+import os
+import numpy as np
+import torch
 
-
+from pyannote.audio import Pipeline as DiarizationPipeline
+from transformers import WhisperForConditionalGeneration, WhisperProcessor
+from huggingface_hub import snapshot_download
 import logging
 import os
 import numpy as np
@@ -77,7 +57,7 @@ MODEL_ID       = "openai/whisper-small"
 CACHE_DIR      = os.environ.get("CACHE_DIR", "./model_cache")
 
 
-# ── ModelManager ───────────────────────────────────────────────────────────────
+# ModelManager 
 
 class ModelManager:
     """
@@ -200,7 +180,7 @@ def diarize_and_transcribe(audio: np.ndarray, manager: ModelManager) -> list:
 def format_conversation(segments: list) -> str:
     """
     Convert segment list into a readable labelled transcript string.
-    e.g. 'SPEAKER_00 [0.5s–8.2s]: Good morning, how are you feeling?'
+    e.g. 'SPEAKER_00 [0.5s-8.2s]: Good morning, how are you feeling?'
     """
     return "\n".join(
         f"{s['speaker']} [{s['start']}s\u2013{s['end']}s]: {s['translation']}"

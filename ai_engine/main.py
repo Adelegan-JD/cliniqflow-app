@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
     logger.info("Whisper loaded ✓")
 
     mm.diarizer = DiarizationPipeline.from_pretrained(
-        "pyannote/speaker-diarization-3.1", token=HF_TOKEN
+        "pyannote/speaker-diarization-3.1"
     ).to(torch.device(mm.device))
     logger.info("pyannote diarizer loaded ✓")
 
@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
     app.state.model_manager  = mm         
     logger.info(f"Ready in {round(time.time()-t0, 2)}s")
 
-    yield  # server runs here
+    yield 
 
     logger.info("Shutting down...")
     del mm.model, mm.processor, mm.diarizer
