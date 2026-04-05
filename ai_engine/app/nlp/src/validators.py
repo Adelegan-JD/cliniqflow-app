@@ -14,7 +14,7 @@ import logging
 import re
 from typing import List
 
-from models.clinical_schema import (
+from ..models.clinical_schema import (
     ConfidenceLevel,
     SOAPNote,
     StructuredClinicalData,

@@ -23,7 +23,7 @@ load_dotenv()  # Load environment variables from .env file
 
 from pydantic import ValidationError
 
-from models.clinical_schema import (
+from ..models.clinical_schema import (
     AllergyRecord,
     ClinicalFlag,
     ConfidenceLevel,
@@ -35,7 +35,7 @@ from models.clinical_schema import (
     Symptom,
     VitalSign,
 )
-from src.confidence_calculator import ConfidenceCalculator
+from .confidence_calculator import ConfidenceCalculator
 
 logger = logging.getLogger("cliniq.nlp.extractor")
 
@@ -166,14 +166,14 @@ class RuleBasedExtractor:
             "temperature": "°C",
             "heart_rate": "bpm",
             "respiratory_rate": "breaths/min",
-            # "oxygen_saturation": "%",
+             "oxygen_saturation": "%",
             "blood_pressure": "mmHg",
         }
         vital_normal_ranges = {
             "temperature": "36.5-37.5",
             "heart_rate": "60-100",
             "respiratory_rate": "12-20",
-            # "oxygen_saturation": "95-100",
+             "oxygen_saturation": "95-100",
             "blood_pressure": "120/80",
         }
         for vital_name, pattern in VITAL_PATTERNS.items():
@@ -231,7 +231,7 @@ class RuleBasedExtractor:
             "temperature": (36.1, 37.5),
             "heart_rate": (60, 110),
             "respiratory_rate": (12, 30),
-            # "oxygen_saturation": (95, 100),
+             "oxygen_saturation": (95, 100),
             "weight": (0, 9999),  # always valid range
         }
         if vital_name in ranges:
@@ -244,7 +244,7 @@ class RuleBasedExtractor:
 # LLM-based extractor
 
 class LLMExtractor:
-    """Uses OpenAI API to extract structured data from transcript."""
+    """OpenAI API to extract structured data from transcript."""
 
     SYSTEM_PROMPT = """You are a clinical NLP assistant working in a Nigerian paediatric primary healthcare context.
 Extract structured clinical information from the transcript provided.

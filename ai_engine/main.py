@@ -1,5 +1,5 @@
 """
-FastAPI application entry point for CliniqFlow backend.
+FastAPI application entry point for CliniqFlow app.
 Registers all route modules. NLP routes are mounted here.
 
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from nlp_routes import router as nlp_router
+from app.nlp.api.nlp_routes import router as nlp_router
 
 from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file

@@ -232,9 +232,9 @@ Outputs:
 from __future__ import annotations
 from enum import Enum
 from typing import List, Optional
-import re  # ✅ NEW: for parsing age strings
+import re  
 
-from models.clinical_schema import PatientDemographics, VitalSign
+from ..models.clinical_schema import PatientDemographics, VitalSign
 
 
 # URGENCY LEVELS
@@ -280,7 +280,7 @@ class UrgencyScorer:
             "critical_high": 40.0,
         },
         "heart_rate": {
-            # ✅ NEW: AGE-BASED RANGES
+            # AGE-BASED RANGES
             "newborn": (100, 180),
             "infant": (100, 160),
             "child": (70, 120),
@@ -288,7 +288,7 @@ class UrgencyScorer:
             "elderly": (55, 95),
         },
         "respiratory_rate": {
-            # ✅ NEW: AGE-BASED RANGES
+            # AGE-BASED RANGES
             "newborn": (30, 60),
             "infant": (30, 50),
             "child": (20, 30),
@@ -309,9 +309,9 @@ class UrgencyScorer:
         },
     }
 
-    # =========================
-    # ✅ NEW: AGE HANDLING
-    # =========================
+    
+    # AGE HANDLING
+    
 
     def _parse_age(self, age_str: str) -> float:
         """Convert '5 years', '3 months', '2 days' → years"""
@@ -349,9 +349,8 @@ class UrgencyScorer:
         else:
             return "elderly"
 
-    # =========================
+
     # MAIN SCORING
-    # =========================
 
     def score(self, vitals: List[VitalSign], demographics: PatientDemographics) -> UrgencyScore:
 
@@ -362,7 +361,7 @@ class UrgencyScorer:
         systolic = None
         diastolic = None
 
-        # ✅ NEW: AGE PROCESSING
+        #  AGE PROCESSING
         age_years = self._parse_age(demographics.age)
         age_years = self._normalize_age(age_years)
         age_group = self._get_age_group(age_years)
@@ -377,11 +376,11 @@ class UrgencyScorer:
                 continue
 
             if "temp" in name:
-                severity = self._assess_temperature(value, age_group)  # ✅ UPDATED
+                severity = self._assess_temperature(value, age_group)  
             elif "heart" in name or "pulse" in name:
-                severity = self._assess_heart_rate(value, age_group)  # ✅ UPDATED
+                severity = self._assess_heart_rate(value, age_group) 
             elif "resp" in name or "breath" in name:
-                severity = self._assess_respiratory_rate(value, age_group)  # ✅ UPDATED
+                severity = self._assess_respiratory_rate(value, age_group)
             elif "oxygen" in name or "spo2" in name:
                 severity = self._assess_oxygen_saturation(value)
             elif "blood" in name or "pressure" in name:
@@ -420,7 +419,7 @@ class UrgencyScorer:
                     score = max(score, 40)
                     reasons.append("Extreme body weight detected")
 
-        # ✅ NEW: ELDERLY SENSITIVITY BOOST
+        #  ELDERLY SENSITIVITY BOOST
         if age_group == "elderly" and abnormal_vitals:
             score += 10
             reasons.append("Elderly risk adjustment applied")
@@ -435,14 +434,13 @@ class UrgencyScorer:
 
         return UrgencyScore(level, score, reasons, abnormal_vitals)
 
-    # =========================
+   
     # UPDATED ASSESSORS
-    # =========================
 
     def _assess_temperature(self, value: float, age_group: str) -> str:
         r = self.VITAL_RANGES["temperature"]
 
-        # ✅ Elderly more sensitive to fever
+        # Elderly more sensitive to fever
         if age_group == "elderly" and value >= 37.5:
             return "high"
 
