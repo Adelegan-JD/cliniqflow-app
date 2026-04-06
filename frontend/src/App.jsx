@@ -27,6 +27,7 @@ import { Settings } from "./pages/Admin/Settings";
 import { Help } from "./pages/Admin/Help";
 import NurseLayout from "./components/Layouts/NurseLayout";
 import { NurseDashboard } from "./pages/Nurse/NurseDashboard";
+import NurseTriage from "./pages/Nurse/NurseTriage";
 import { NurseHelp } from "./pages/Nurse/Help";
 import RecordOfficerLayout from "./components/Layouts/RecordOfficerLayout";
 import RecordOfficerHelp from "./pages/RecordOfficers/RecordOfficerHelp";
@@ -149,7 +150,8 @@ function App() {
               }
             >
               <Route index element={<NurseDashboard />} />
-              <Route path="/nurse-dashboard/help" element={<NurseHelp />} />
+              <Route path="triage/:patientId" element={<NurseTriage />} />
+              <Route path="help" element={<NurseHelp />} />
             </Route>
 
             {/* record officer route */}
