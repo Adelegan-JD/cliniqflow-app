@@ -24,7 +24,7 @@ from slowapi.util import get_remote_address
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 # API routers 
-from app.api.asr_api       import router as asr_router
+from app.api.asr_api       import router as asr_router,conversation_router
 from app.nlp.api.nlp_routes import router as nlp_router
 
 load_dotenv()
@@ -114,6 +114,7 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 
 # Register routers 
 app.include_router(asr_router,dependencies=[Depends(verify_api_key)])
+app.include_router(conversation_router, dependencies=[Depends(verify_api_key)])
 app.include_router(nlp_router)
 
 
