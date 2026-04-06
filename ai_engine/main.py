@@ -1,8 +1,5 @@
-# import os as os
-# import torch
 
-# # This helps Python find the torch binaries if they are hidden
-# os.add_dll_directory(os.path.join(os.environ['VIRTUAL_ENV'], 'Lib', 'site-packages', 'torch', 'lib'))
+from __future__ import annotations
 
 from app.asr.asr_engine import (
     ModelManager,
@@ -28,6 +25,7 @@ from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 # API routers 
 from app.api.asr_api       import router as asr_router
+from app.nlp.api.nlp_routes import router as nlp_router
 
 load_dotenv()
 
@@ -116,6 +114,7 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 
 # Register routers 
 app.include_router(asr_router,dependencies=[Depends(verify_api_key)])
+app.include_router(nlp_router)
 
 
 
