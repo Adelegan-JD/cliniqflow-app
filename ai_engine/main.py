@@ -1,10 +1,12 @@
-# ── MUST be first import — runs all torchaudio/pyannote patches ───────────────
+
+from __future__ import annotations
+
 from app.asr.asr_engine import (
     ModelManager,
     download_model_if_needed,
 )
 
-# ── Standard imports 
+# Standard imports 
 import logging
 import os
 import time
@@ -21,12 +23,13 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
-# ── API routers ───────────────────────────────────────────────────────────────
-from app.api.asr_api    import router as asr_router,conversation_router
+# API routers 
+from app.api.asr_api       import router as asr_router
+from app.nlp.api.nlp_routes import router as nlp_router
 
 load_dotenv()
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# Config 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -38,7 +41,7 @@ HF_TOKEN        = os.environ.get("HF_TOKEN")
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:8000").split(",")
 
 
-# Lifespan — load models once at startup 
+# load models once at startup 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Server starting up...")
@@ -59,21 +62,16 @@ async def lifespan(app: FastAPI):
     mm.model.eval()
     logger.info("Whisper loaded ✓")
 
-    # Inject token via env so pyannote finds it regardless of API version
-    if HF_TOKEN:
-        os.environ["HUGGING_FACE_HUB_TOKEN"] = HF_TOKEN
-        os.environ["HF_TOKEN"] = HF_TOKEN
-
     mm.diarizer = DiarizationPipeline.from_pretrained(
-        "pyannote/speaker-diarization-3.1",
+        "pyannote/speaker-diarization-3.1"
     ).to(torch.device(mm.device))
     logger.info("pyannote diarizer loaded ✓")
 
     mm.model_loaded          = True
-    app.state.model_manager  = mm          # <-- shared across all routers
+    app.state.model_manager  = mm         
     logger.info(f"Ready in {round(time.time()-t0, 2)}s")
 
-    yield  # server runs here
+    yield 
 
     logger.info("Shutting down...")
     del mm.model, mm.processor, mm.diarizer
@@ -82,7 +80,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutdown complete.")
 
 
-# ── App 
+# App
 app = FastAPI(
     title="CLINIQ-FLOW AI Engine",
     description="AI-assisted clinical workflow — transcription, SOAP notes, triage, medication validation",
@@ -105,7 +103,6 @@ app.add_middleware(
 )
 
 
-# ── Auth (shared — applied to all routers via include_router dependencies) ────
 security = HTTPBearer()
 
 def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -115,12 +112,12 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
     return credentials.credentials
 
 
-# ── Register routers ──────────────────────────────────────────────────────────
-app.include_router(asr_router,        dependencies=[Depends(verify_api_key)])
-app.include_router(conversation_router, dependencies=[Depends(verify_api_key)])
+# Register routers 
+app.include_router(asr_router,dependencies=[Depends(verify_api_key)])
+app.include_router(nlp_router)
 
 
-# ── Root 
+
 @app.get("/", tags=["Root"])
 async def root():
     return {
