@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { api } from "../utils/api";
+import { getTriageResult } from "../utils/triageRules";
 import { User, Activity, ArrowLeft, CheckCircle, Clock, AlertTriangle, Info, Loader2 } from "lucide-react";
 
 export default function TriageForm({ patient, onCancel, onSave, initialVitals }) {
@@ -76,15 +77,40 @@ const handleEvaluate = async () => {
   };
 
   try {
-    // Call backend using your api.js helper
-    const data = await api.post("/nlp/vitals-urgency", payload);
+    // First try local rule-based evaluation for reliability
+    const ruleResult = getTriageResult({ symptoms: patient?.symptoms || "" });
+    const localMap = {
+      RED: "emergency",
+      YELLOW: "urgent",
+      GREEN: "normal",
+    };
 
-    setTriageStatus(data.urgency_level);
-    setTriageMethod(data.method || null);
+    const localUrgency = localMap[ruleResult.level] || "normal";
 
+    if (import.meta.env.CLINIQ_AUTH_MODE === "supabase") {
+      setTriageStatus(localUrgency);
+      setTriageMethod("rule_based");
+    } else {
+      // non-supabase: also attempt backend NLP endpoint
+      const data = await api.post("/nlp/vitals-urgency", payload);
+      const normalized = data.urgency_level ? data.urgency_level.toLowerCase() : localUrgency;
+      const statusMap = {
+        red: "emergency",
+        yellow: "urgent",
+        green: "normal",
+        emergency: "emergency",
+        urgent: "urgent",
+        normal: "normal",
+        critical: "critical",
+      };
+      setTriageStatus(statusMap[normalized] || localUrgency);
+      setTriageMethod(data.method || "rule_based");
+    }
   } catch (error) {
     console.error("Error fetching urgency level:", error);
-    setErrorMessage("Failed to evaluate vitals. Please try again.");
+    setTriageStatus("normal");
+    setTriageMethod("rule_based");
+    setErrorMessage("Failed to evaluate vitals via service; using local assessment.");
   } finally {
     setIsEvaluating(false);
   }

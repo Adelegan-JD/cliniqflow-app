@@ -1,8 +1,15 @@
+# Python
 .venv/
 venv/
 __pycache__/
 *.py[cod]
+*.pyc
 .pytest_cache/
-.env
 *.egg-info/
-.env.example
+
+# Secrets (commit `.env.example`, not real `.env`)
+.env
+.env.local
+
+# R / renv (if present elsewhere in repo)
+renv/
