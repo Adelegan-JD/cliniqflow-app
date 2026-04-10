@@ -10,9 +10,24 @@ from app.core.security import (
     CurrentUser,
     require_roles,
 )
-from app.repositories.memory_store import store
+from app.repositories import store
+from app.schemas.workflows import RegisterPatientBody
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+
+@router.post("", response_model=dict[str, Any])
+def create_patient(
+    body: RegisterPatientBody,
+    _user: Annotated[
+        CurrentUser,
+        Depends(require_roles(ROLE_RECORD_OFFICER, ROLE_ADMIN)),
+    ],
+) -> dict[str, Any]:
+    """Same behaviour as POST /record-officer/register-patient for REST-style clients."""
+    data = body.model_dump()
+    row = store.register_patient(data, registered_by=_user.staff_id)
+    return {"pid": row["pid"], "id": row["id"], **row}
 
 
 @router.get("", response_model=list[dict[str, Any]])
@@ -23,7 +38,7 @@ def list_patients_resource(
     ],
 ) -> list[dict[str, Any]]:
     """REST list for integrations; prefer role-scoped routes for UX."""
-    return list(store.patients.values())
+    return store.list_patients(None)
 
 
 @router.get("/{patient_id}", response_model=dict[str, Any])

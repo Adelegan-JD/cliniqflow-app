@@ -9,7 +9,13 @@ from app.core.config import settings
 
 
 def _base() -> str:
-    return settings.ai_engine_url.rstrip("/")
+    base = (settings.ai_engine_url or "").strip().rstrip("/")
+    if not base:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI engine URL is not configured",
+        )
+    return base
 
 
 def _headers() -> dict[str, str]:

@@ -1,20 +1,27 @@
 # Backend
 
-FastAPI API for the app. Default port **8000**.
+FastAPI service. Runs on **port 8000** by default.
+
+## Run locally
 
 ```bash
+cd backend
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
 ```
 
-Copy `.env.example` to `.env` and edit it. Then run:
+**Windows (PowerShell):** `.\.venv\Scripts\Activate.ps1`  
+**Windows (cmd):** `.\.venv\Scripts\activate.bat`
 
 ```bash
+pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Routes under `/ai`, `/nlp`, and `/translate/chunk` call `AI_ENGINE_URL` (see `.env.example`). If nothing is listening there, those calls return **503** — the ML team ships that service separately; `../ai_engine` is reserved for them.
+- **Docs:** http://127.0.0.1:8000/docs  
+- **Health:** http://127.0.0.1:8000/health (`persistence` is `postgres` only if `DATABASE_URL` is set)
+
+
+## Tests
 
 ```bash
 pytest

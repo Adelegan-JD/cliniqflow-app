@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import os
 from typing import Annotated
 
 import jwt
@@ -9,7 +10,6 @@ from app.core.config import settings
 
 security = HTTPBearer(auto_error=False)
 
-# Normalized role strings used for RBAC
 ROLE_ADMIN = "admin"
 ROLE_DOCTOR = "doctor"
 ROLE_NURSE = "nurse"
@@ -21,6 +21,7 @@ class CurrentUser:
     id: str
     email: str | None
     role: str
+    staff_id: str | None = None
 
 
 def _normalize_role(raw: str | None) -> str:
@@ -37,7 +38,6 @@ def _normalize_role(raw: str | None) -> str:
 
 def _decode_supabase_jwt(token: str) -> dict:
     try:
-        # Supabase uses HS256 and audience "authenticated" for end-user JWTs
         opts: dict = {"verify_aud": settings.supabase_jwt_verify_aud}
         extra: dict = {}
         if settings.supabase_jwt_verify_aud:
@@ -65,6 +65,7 @@ def get_current_user(
     creds: HTTPAuthorizationCredentials | None = Depends(security),
     x_debug_role: Annotated[str | None, Header()] = None,
     x_debug_user_id: Annotated[str | None, Header()] = None,
+    x_debug_staff_id: Annotated[str | None, Header()] = None,
 ) -> CurrentUser:
     if creds is None or creds.scheme.lower() != "bearer":
         raise HTTPException(
@@ -75,10 +76,30 @@ def get_current_user(
 
     if settings.cliniq_dev_bypass_auth:
         role = _normalize_role(x_debug_role or "admin")
+        sid = x_debug_staff_id or "DEV-STAFF-0001"
         return CurrentUser(
             id=x_debug_user_id or "dev-user",
             email="dev@local",
             role=role,
+            staff_id=sid,
+        )
+
+    if os.getenv("JWT_SECRET"):
+        from auth.jwt import JWTValidationError
+        from auth.service import get_current_staff
+
+        try:
+            staff = get_current_staff(token)
+        except JWTValidationError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(e),
+            ) from e
+        return CurrentUser(
+            id=str(staff["id"]),
+            email=staff.get("email"),
+            role=_normalize_role(staff.get("role")),
+            staff_id=staff.get("staff_id"),
         )
 
     payload = _decode_supabase_jwt(token)
@@ -88,7 +109,7 @@ def get_current_user(
     app_meta = payload.get("app_metadata") or {}
     role_raw = meta.get("role") or app_meta.get("role")
     role = _normalize_role(str(role_raw) if role_raw else None)
-    return CurrentUser(id=sub, email=email, role=role)
+    return CurrentUser(id=sub, email=email, role=role, staff_id=None)
 
 
 def require_roles(*allowed: str):

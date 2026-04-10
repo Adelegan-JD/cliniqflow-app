@@ -3,6 +3,10 @@ from sqlalchemy import text
 
 
 def create_tables():
+    if engine is None:
+        print("DATABASE_URL is not set; cannot create tables.")
+        return
+
     ddl_statements = [
         """
         CREATE EXTENSION IF NOT EXISTS "pgcrypto";

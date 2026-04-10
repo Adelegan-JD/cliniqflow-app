@@ -11,6 +11,14 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Any
 
+from app.core.visit_status import (
+    COMPLETED,
+    WAITING_FOR_DOCTOR,
+    WAITING_FOR_TRIAGE,
+    WITH_DOCTOR,
+    normalize_visit_status,
+)
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -50,7 +58,9 @@ class MemoryStore:
         n = next(self._visit_seq)
         return f"VS-{date.today().year}-{n:05d}"
 
-    def register_patient(self, data: dict[str, Any]) -> dict[str, Any]:
+    def register_patient(
+        self, data: dict[str, Any], registered_by: str | None = None
+    ) -> dict[str, Any]:
         with self._lock:
             pid = self.next_pid()
             uid = str(uuid.uuid4())
@@ -60,6 +70,8 @@ class MemoryStore:
                 "created_at": _utcnow().isoformat(),
                 **data,
             }
+            if registered_by:
+                row["registered_by"] = registered_by
             self.patients[uid] = row
             return row
 
@@ -114,6 +126,7 @@ class MemoryStore:
         patient_id: str,
         reason_for_visit: str | None,
         department: str | None,
+        checked_in_by: str | None = None,
     ) -> dict[str, Any] | None:
         p = self.get_patient(patient_id)
         if not p:
@@ -127,7 +140,7 @@ class MemoryStore:
                 "patient_name": f"{p.get('firstName', '')} {p.get('lastName', '')}".strip(),
                 "reason_for_visit": reason_for_visit,
                 "department": department,
-                "visit_status": "WAITING_FOR_TRIAGE",
+                "visit_status": WAITING_FOR_TRIAGE,
                 "triage_status": "PENDING",
                 "created_at": now.isoformat(),
             }
@@ -135,26 +148,62 @@ class MemoryStore:
             return row
 
     def get_visit(self, visit_id: str) -> dict[str, Any] | None:
-        return self.visits.get(visit_id)
+        v = self.visits.get(visit_id)
+        if not v:
+            return None
+        out = dict(v)
+        out["visit_status"] = normalize_visit_status(out.get("visit_status"))
+        return out
+
+    def list_visits_values(self) -> list[dict[str, Any]]:
+        out = []
+        for v in self.visits.values():
+            row = dict(v)
+            row["visit_status"] = normalize_visit_status(row.get("visit_status"))
+            out.append(row)
+        return out
+
+    def list_visits_for_nurse_queue(self) -> list[dict[str, Any]]:
+        """Visits still waiting for triage."""
+        out = []
+        for v in self.visits.values():
+            st = normalize_visit_status(v.get("visit_status"))
+            if st != WAITING_FOR_TRIAGE:
+                continue
+            p = self.get_patient(v["patient_id"])
+            out.append(
+                {
+                    "visit_id": v["visit_id"],
+                    "patient_id": v["patient_id"],
+                    "patient_name": v.get("patient_name"),
+                    "visit_status": st,
+                    "triage_status": v.get("triage_status"),
+                    "created_at": v.get("created_at"),
+                    "age": p.get("age") if p else None,
+                    "gender": p.get("gender") if p else None,
+                }
+            )
+        return sorted(out, key=lambda x: x.get("created_at") or "", reverse=True)
 
     def list_visits_for_doctor_queue(self) -> list[dict[str, Any]]:
         out = []
         for v in self.visits.values():
-            st = v.get("visit_status") or ""
-            if st in ("WAITING_FOR_TRIAGE", "TRIAGED", "IN_CONSULTATION", "WAITING_FOR_CONSULTATION"):
-                p = self.get_patient(v["patient_id"])
-                out.append(
-                    {
-                        "visit_id": v["visit_id"],
-                        "patient_id": v["patient_id"],
-                        "patient_name": v.get("patient_name"),
-                        "visit_status": v.get("visit_status"),
-                        "triage_status": v.get("triage_status"),
-                        "created_at": v.get("created_at"),
-                        "age": p.get("age") if p else None,
-                        "gender": p.get("gender") if p else None,
-                    }
-                )
+            st = normalize_visit_status(v.get("visit_status"))
+            if st not in (WAITING_FOR_DOCTOR, WITH_DOCTOR):
+                continue
+            p = self.get_patient(v["patient_id"])
+            out.append(
+                {
+                    "visit_id": v["visit_id"],
+                    "patient_id": v["patient_id"],
+                    "patient_name": v.get("patient_name"),
+                    "visit_status": st,
+                    "triage_status": v.get("triage_status"),
+                    "created_at": v.get("created_at"),
+                    "age": p.get("age") if p else None,
+                    "gender": p.get("gender") if p else None,
+                }
+            )
         return sorted(out, key=lambda x: x.get("created_at") or "", reverse=True)
 
     def save_triage(
@@ -163,13 +212,14 @@ class MemoryStore:
         patient_id: str,
         vitals: dict[str, Any],
         urgency: str | None,
+        nurse_staff_id: str | None = None,
     ) -> dict[str, Any] | None:
         v = self.get_visit(visit_id)
         if not v or v.get("patient_id") != patient_id:
             return None
         p = self.get_patient(patient_id)
         with self._lock:
-            v["visit_status"] = "TRIAGED"
+            v["visit_status"] = WAITING_FOR_DOCTOR
             v["triage_status"] = "COMPLETE"
             v["triage_vitals"] = vitals
             v["urgency_level"] = urgency
@@ -224,11 +274,12 @@ class MemoryStore:
         soap: dict[str, str],
         prescriptions: list[dict[str, Any]],
         doctor_notes: str | None,
+        doctor_staff_id: str | None = None,
     ) -> dict[str, Any]:
         with self._lock:
             v = self.visits.get(visit_id)
             if v:
-                v["visit_status"] = "COMPLETED"
+                v["visit_status"] = COMPLETED
                 v["completed_at"] = _utcnow().isoformat()
             p = self.get_patient(patient_id) if patient_id else None
             triage_data = None
@@ -273,6 +324,30 @@ class MemoryStore:
     def list_examinations(self) -> list[dict[str, Any]]:
         return list(reversed(self.examinations.copy()))
 
+    def start_exam(self, visit_id: str) -> dict[str, Any] | None:
+        """Mark visit as doctor in room (from WAITING_FOR_DOCTOR)."""
+        v = self.visits.get(visit_id)
+        if not v:
+            return None
+        st = normalize_visit_status(v.get("visit_status"))
+        if st != WAITING_FOR_DOCTOR:
+            return None
+        with self._lock:
+            v["visit_status"] = WITH_DOCTOR
+        return self.get_visit(visit_id)
+
+    def cancel_exam(self, visit_id: str) -> dict[str, Any] | None:
+        """Return visit to doctor queue without saving (from WITH_DOCTOR)."""
+        v = self.visits.get(visit_id)
+        if not v:
+            return None
+        st = normalize_visit_status(v.get("visit_status"))
+        if st != WITH_DOCTOR:
+            return None
+        with self._lock:
+            v["visit_status"] = WAITING_FOR_DOCTOR
+        return self.get_visit(visit_id)
+
     def doctor_dashboard_stats(self) -> dict[str, int]:
         today = date.today().isoformat()
         visits_today = [
@@ -281,18 +356,26 @@ class MemoryStore:
         return {
             "totalPatientsToday": len(visits_today),
             "awaitingTriage": len(
-                [v for v in self.visits.values() if v.get("visit_status") == "WAITING_FOR_TRIAGE"]
+                [
+                    v
+                    for v in self.visits.values()
+                    if normalize_visit_status(v.get("visit_status")) == WAITING_FOR_TRIAGE
+                ]
             ),
             "awaitingConsultation": len(
                 [
                     v
                     for v in self.visits.values()
-                    if v.get("visit_status")
-                    in ("TRIAGED", "WAITING_FOR_CONSULTATION", "IN_CONSULTATION")
+                    if normalize_visit_status(v.get("visit_status"))
+                    in (WAITING_FOR_DOCTOR, WITH_DOCTOR)
                 ]
             ),
             "visitsEnded": len(
-                [v for v in self.visits.values() if v.get("visit_status") == "COMPLETED"]
+                [
+                    v
+                    for v in self.visits.values()
+                    if normalize_visit_status(v.get("visit_status")) == COMPLETED
+                ]
             ),
         }
 
@@ -307,7 +390,7 @@ class MemoryStore:
         waiting = [
             v
             for v in self.visits.values()
-            if v.get("visit_status") == "WAITING_FOR_TRIAGE"
+            if normalize_visit_status(v.get("visit_status")) == WAITING_FOR_TRIAGE
         ]
         recent_visits = sorted(
             self.visits.values(),
@@ -354,6 +437,17 @@ class MemoryStore:
             ],
         }
 
+    def list_users_admin(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": u.get("id"),
+                "name": u.get("name", ""),
+                "email": u.get("email", ""),
+                "role": u.get("role", ""),
+            }
+            for u in self.users
+        ]
+
     def admin_stats(self) -> dict[str, int]:
         today = date.today().isoformat()
         visits_today = sum(
@@ -369,13 +463,15 @@ class MemoryStore:
                 [
                     v
                     for v in self.visits.values()
-                    if (v.get("visit_status") or "")
-                    in ("TRIAGED", "WAITING_FOR_CONSULTATION")
+                    if normalize_visit_status(v.get("visit_status"))
+                    in (WAITING_FOR_DOCTOR, WITH_DOCTOR)
                 ]
             ),
         }
 
-    def add_user_invite(self, email: str, display_name: str, role: str) -> dict[str, Any]:
+    def add_user_invite(
+        self, email: str, display_name: str, role: str, password: str | None = None
+    ) -> dict[str, Any]:
         row = {
             "id": str(uuid.uuid4()),
             "email": email,

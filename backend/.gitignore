@@ -10,6 +10,6 @@ __pycache__/
 # Secrets (commit `.env.example`, not real `.env`)
 .env
 .env.local
-
+.env.example
 # R / renv (if present elsewhere in repo)
 renv/

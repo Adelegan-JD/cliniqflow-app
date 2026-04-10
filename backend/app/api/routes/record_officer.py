@@ -1,8 +1,6 @@
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
-
 from app.core.security import (
     ROLE_ADMIN,
     ROLE_DOCTOR,
@@ -11,42 +9,10 @@ from app.core.security import (
     CurrentUser,
     require_roles,
 )
-from app.repositories.memory_store import store
+from app.repositories import store
+from app.schemas.workflows import CreateVisitBody, RegisterPatientBody
 
 router = APIRouter(prefix="/record-officer", tags=["record-officer"])
-
-
-class RegisterPatientBody(BaseModel):
-    firstName: str
-    lastName: str
-    otherNames: str | None = None
-    dob: str
-    gender: str
-    civilStatus: str | None = None
-    religion: str | None = None
-    tribe: str | None = None
-    nationality: str | None = None
-    phone: str
-    altPhone: str | None = None
-    email: str | None = None
-    address: str
-    state: str | None = None
-    lga: str | None = None
-    nin: str | None = None
-    nhisNumber: str | None = None
-    militaryNumber: str | None = None
-    education: str | None = None
-    occupation: str | None = None
-    nokName: str
-    nokRelationship: str
-    nokPhone: str
-    nokAddress: str | None = None
-
-
-class CreateVisitBody(BaseModel):
-    patient_id: str
-    reason_for_visit: str | None = None
-    department: str | None = None
 
 
 @router.get("/dashboard")
@@ -93,7 +59,7 @@ def register_patient(
     _user: Annotated[CurrentUser, Depends(require_roles(ROLE_RECORD_OFFICER))],
 ) -> dict[str, Any]:
     data = body.model_dump()
-    row = store.register_patient(data)
+    row = store.register_patient(data, registered_by=_user.staff_id)
     return {"pid": row["pid"], "id": row["id"], **row}
 
 
@@ -106,6 +72,7 @@ def create_visit(
         patient_id=body.patient_id,
         reason_for_visit=body.reason_for_visit,
         department=body.department,
+        checked_in_by=_user.staff_id,
     )
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")

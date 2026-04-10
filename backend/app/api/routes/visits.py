@@ -11,7 +11,8 @@ from app.core.security import (
     CurrentUser,
     require_roles,
 )
-from app.repositories.memory_store import store
+from app.repositories import store
+from app.schemas.workflows import CreateVisitBody
 from app.services import ai_engine_client
 
 router = APIRouter(prefix="/visits", tags=["visits"])
@@ -31,7 +32,37 @@ def list_visits(
         Depends(require_roles(ROLE_DOCTOR, ROLE_NURSE, ROLE_ADMIN, ROLE_RECORD_OFFICER)),
     ],
 ) -> list[dict[str, Any]]:
-    return list(store.visits.values())
+    return store.list_visits_values()
+
+
+@router.post("", response_model=dict[str, Any])
+def create_visit(
+    body: CreateVisitBody,
+    _user: Annotated[
+        CurrentUser,
+        Depends(require_roles(ROLE_RECORD_OFFICER, ROLE_ADMIN)),
+    ],
+) -> dict[str, Any]:
+    """Same behaviour as POST /record-officer/visits for REST-style clients."""
+    row = store.create_visit(
+        patient_id=body.patient_id,
+        reason_for_visit=body.reason_for_visit,
+        department=body.department,
+        checked_in_by=_user.staff_id,
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    created = row["created_at"]
+    return {
+        "visit_id": row["visit_id"],
+        "patient_id": row["patient_id"],
+        "patient_name": row["patient_name"],
+        "visit_date": created[:10] if created else None,
+        "visit_time": created[11:16] if created and len(created) >= 16 else None,
+        "visit_status": row["visit_status"],
+        "triage_status": row["triage_status"],
+        "created_at": created,
+    }
 
 
 @router.get("/{visit_id}", response_model=dict[str, Any])
