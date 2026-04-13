@@ -19,6 +19,8 @@ STAFF_ROLE_PREFIXES = {
     "doctor": "DOC",
     "nurse": "NUR",
     "record_officer": "REC",
+    "pharmacist": "PHA",
+    "lab_scientist": "LAB",
 }
 
 
