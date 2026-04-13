@@ -12,8 +12,8 @@ python-multipart
 slowapi
  
 # pip install torch==2.1.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cpu
-torch==2.1.2
-torchaudio==2.1.2
+torch
+torchaudio
  
 huggingface-hub==0.23.4
 transformers==4.40.0
@@ -26,3 +26,6 @@ lightning==2.2.4
 librosa
 soundfile
 numpy
+
+python-docx
+pdfplumber
