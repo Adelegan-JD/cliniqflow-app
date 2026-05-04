@@ -1,0 +1,29 @@
+Most drugs in children are dosed according to body weight (mg/kg) or body surface area (BSA) (mg/m2). Care must be taken to properly convert body weight from pounds to kilograms (1 kg = 2.2 lb) before calculating doses based on body weight. Doses are often expressed as mg/kg/day or mg/kg/dose; therefore, orders written "mg/kg/d," which is confusing, require further clarification from the prescriber.
+
+Chemotherapeutic drugs are commonly dosed according to body surface area, which requires an extra verification step (BSA calculation) prior to dosing. Medications are available in multiple concentrations, therefore orders written in "mL" rather than "mg" are not acceptable and require further clarification.
+
+Dosing also varies by indication; therefore, diagnostic information is helpful when calculating doses. The following examples are typically encountered when dosing medication in children.
+
+Example 1.
+
+Amoxicillin oral suspension will be given to a 1-yr-old child weighing 22 lb for otitis media at a dose of 40 mg/kg/day in 2 divided doses. The suspension is available at a concentration of 400 mg/5 mL. How many milliliters should be administered to the child for each dose?
+
+Step 1. Convert pounds to kg:	22 lb × 1 kg/2.2 lb = 10 kg
+Step 2. Calculate the dose in mg:	10 kg × 40 mg/kg/day = 400 mg/day
+Step 3. Divide the dose by the frequency:	400 mg/day ÷ 2 = 200 mg/dose
+Step 4. Convert the mg dose to mL:	200 mg/dose ÷ 400 mg/5 mL = 2.5 mL
+Example 2.
+
+Ceftriaxone is being prescribed for a 5-yr-old child weighing 18 kg for meningitis at a dose of 100 mg/kg IV once daily. After reconstitution, the concentration of ceftriaxone solution in the vial is 40 mg/mL. How many milliliters of the solution should be administered to this child for each dose?
+
+Step 1. Calculate the dose in mg:	18 kg × 100 mg/kg/day = 1800 mg/day
+Step 2. Divide the dose by the frequency:	1800 mg/day ÷ 1 (daily) = 1800 mg/dose
+Step 3. Convert the mg dose to mL:	1800 mg/dose ÷ 40 mg/mL = 45 mL
+Example 3.
+
+Vincristine is being administered to a 4-yr-old child (height 97 cm; weight 37 lb) with leukemia at a dose of 2 mg/m2. Vincristine is available in a vial at a concentration of 1 mg/mL. How many milliliters should be administered to this child for each dose?
+
+Step 1. Convert pounds to kg:	37 lb × 1 kg/2.2 lb = 16.8 kg
+Step 2. Calculate BSA:	√16.8 kg × 97 cm/3600 = 0.67 m2
+Step 3. Calculate the dose in mg:	2 mg/m2 × 0.67 m2 = 1.34 mg
+Step 4. Calculate the dose in mL:	1.34 mg ÷ 1 mg/mL = 1.34 mL
