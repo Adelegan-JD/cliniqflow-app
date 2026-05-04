@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # Comma-separated origins for CORS
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     # When true, accept any Bearer token and use X-Debug-Role / X-Debug-User-Id (local only)
-    cliniq_dev_bypass_auth: bool = False
+    cliniq_dev_bypass_auth: bool = True
 
 
 settings = Settings()
