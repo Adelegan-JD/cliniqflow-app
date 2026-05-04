@@ -26,6 +26,7 @@ from transformers import WhisperForConditionalGeneration, WhisperProcessor
 # API routers 
 from app.api.asr_api       import router as asr_router
 from app.nlp.api.nlp_routes import router as nlp_router
+from app.api.rag_api       import router as rag_router
 
 load_dotenv()
 
@@ -115,6 +116,7 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 # Register routers 
 app.include_router(asr_router,dependencies=[Depends(verify_api_key)])
 app.include_router(nlp_router)
+app.include_router(rag_router)
 
 
 
@@ -124,7 +126,7 @@ async def root():
         "service": "CLINIQ-FLOW AI Engine",
         "version": "1.0.0",
         "docs":    "/docs",
-        "routes":  ["/asr", "/soap", "/medication", "/triage"],
+        "routes":  ["/asr", "/nlp", "/rag"],
     }
 
 @app.get("/health", tags=["Root"])

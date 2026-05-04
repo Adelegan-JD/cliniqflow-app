@@ -9,12 +9,38 @@ from app.repositories import store
 router = APIRouter(prefix="/nurse", tags=["nurse"])
 
 
+def _normalize_nurse_queue_item(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "visit_id": item.get("visit_id"),
+        "patient_id": item.get("patient_id"),
+        "patientId": item.get("patient_id"),
+        "name": item.get("patient_name") or item.get("name") or "",
+        "age": item.get("age"),
+        "sex": item.get("gender") or item.get("sex"),
+        "gender": item.get("gender"),
+        "status": "awaiting_triage",
+        "urgency": item.get("urgency") or "normal",
+        "visit_status": item.get("visit_status"),
+        "triage_status": item.get("triage_status"),
+        "created_at": item.get("created_at"),
+    }
+
+
 @router.get("/queue", response_model=list[dict[str, Any]])
+@router.get("/triage-queue", response_model=list[dict[str, Any]])
 def nurse_queue(
     _user: Annotated[CurrentUser, Depends(require_roles(ROLE_NURSE))],
 ) -> list[dict[str, Any]]:
     """Visits waiting for triage (same underlying rows as record-officer pre-clinical queue)."""
-    return store.list_visits_for_nurse_queue()
+    return [_normalize_nurse_queue_item(item) for item in store.list_visits_for_nurse_queue()]
+
+
+@router.get("/stats", response_model=dict[str, int])
+def nurse_stats(
+    _user: Annotated[CurrentUser, Depends(require_roles(ROLE_NURSE))],
+) -> dict[str, int]:
+    """Nurse dashboard statistics aligned with frontend nurse dashboard metrics."""
+    return store.doctor_dashboard_stats()
 
 
 class TriageSubmitRequest(BaseModel):
