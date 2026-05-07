@@ -1,12 +1,15 @@
 from dataclasses import dataclass
+from functools import lru_cache
 import os
 from typing import Annotated
 
 import jwt
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import text
 
 from app.core.config import settings
+from database.config import engine
 
 security = HTTPBearer(auto_error=False)
 
@@ -37,17 +40,38 @@ def _normalize_role(raw: str | None) -> str:
 
 
 def _decode_supabase_jwt(token: str) -> dict:
+    opts: dict = {"verify_aud": settings.supabase_jwt_verify_aud}
+    decode_kwargs: dict = {
+        "options": opts,
+        "issuer": settings.resolved_supabase_jwt_issuer,
+    }
+    if settings.supabase_jwt_verify_aud:
+        decode_kwargs["audience"] = "authenticated"
+
     try:
-        opts: dict = {"verify_aud": settings.supabase_jwt_verify_aud}
-        extra: dict = {}
-        if settings.supabase_jwt_verify_aud:
-            extra["audience"] = "authenticated"
+        alg = str((jwt.get_unverified_header(token) or {}).get("alg") or "").upper()
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        ) from e
+
+    try:
+        if alg.startswith("HS"):
+            return jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=["HS256"],
+                **decode_kwargs,
+            )
+
+        signing_key = _supabase_jwks_client().get_signing_key_from_jwt(token).key
+        accepted_algs = [alg] if alg else ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"]
         return jwt.decode(
             token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            **extra,
-            options=opts,
+            signing_key,
+            algorithms=accepted_algs,
+            **decode_kwargs,
         )
     except jwt.ExpiredSignatureError as e:
         raise HTTPException(
@@ -59,6 +83,31 @@ def _decode_supabase_jwt(token: str) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         ) from e
+
+
+@lru_cache(maxsize=1)
+def _supabase_jwks_client() -> jwt.PyJWKClient:
+    return jwt.PyJWKClient(settings.resolved_supabase_jwks_url)
+
+
+def _resolve_staff_id_by_email(email: str | None) -> str | None:
+    if not email or engine is None:
+        return None
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT staff_id
+                FROM users
+                WHERE lower(email) = lower(:email)
+                LIMIT 1;
+                """
+            ),
+            {"email": email},
+        ).mappings().first()
+
+    return row["staff_id"] if row else None
 
 
 def get_current_user(
@@ -96,10 +145,10 @@ def get_current_user(
                 detail=str(e),
             ) from e
         return CurrentUser(
-            id=str(staff["id"]),
-            email=staff.get("email"),
-            role=_normalize_role(staff.get("role")),
-            staff_id=staff.get("staff_id"),
+            id=str(staff["id"]), # type: ignore
+            email=staff.get("email"), # pyright: ignore[reportOptionalMemberAccess]
+            role=_normalize_role(staff.get("role")), # type: ignore
+            staff_id=staff.get("staff_id"), # type: ignore
         )
 
     payload = _decode_supabase_jwt(token)
@@ -109,7 +158,12 @@ def get_current_user(
     app_meta = payload.get("app_metadata") or {}
     role_raw = meta.get("role") or app_meta.get("role")
     role = _normalize_role(str(role_raw) if role_raw else None)
-    return CurrentUser(id=sub, email=email, role=role, staff_id=None)
+    return CurrentUser(
+        id=sub,
+        email=email,
+        role=role,
+        staff_id=_resolve_staff_id_by_email(email),
+    )
 
 
 def require_roles(*allowed: str):

@@ -1143,6 +1143,31 @@ class DbStore:
                     """
                 )
             ).mappings().all()
+            todays_records = conn.execute(
+                text(
+                    """
+                    SELECT
+                        p.id,
+                        p.pid,
+                        p.first_name,
+                        p.last_name,
+                        p.other_names,
+                        p.gender,
+                        p.date_of_birth,
+                        p.created_at,
+                        p.registered_by,
+                        u.first_name AS officer_first_name,
+                        u.last_name AS officer_last_name,
+                        u.other_names AS officer_other_names,
+                        u.staff_id AS officer_staff_id
+                    FROM patients p
+                    LEFT JOIN users u ON u.staff_id = p.registered_by
+                    WHERE p.created_at::date = :d
+                    ORDER BY p.created_at DESC;
+                    """
+                ),
+                {"d": today},
+            ).mappings().all()
         return {
             "stats": {
                 "visitsToday": int(vt),
@@ -1182,7 +1207,100 @@ class DbStore:
                 }
                 for x in rr
             ],
+            "todayRecords": [
+                {
+                    "id": str(x["id"]),
+                    "pid": x["pid"],
+                    "name": f"{x['first_name']} {x['last_name']}".strip(),
+                    "otherNames": x.get("other_names"),
+                    "gender": x.get("gender"),
+                    "dateOfBirth": x["date_of_birth"].isoformat()
+                    if x.get("date_of_birth")
+                    else None,
+                    "date": x["created_at"].date().isoformat()
+                    if x.get("created_at")
+                    else None,
+                    "time": x["created_at"].strftime("%H:%M:%S")
+                    if x.get("created_at")
+                    else None,
+                    "registeredBy": " ".join(
+                        part
+                        for part in [
+                            x.get("officer_first_name"),
+                            x.get("officer_other_names"),
+                            x.get("officer_last_name"),
+                        ]
+                        if part
+                    ).strip()
+                    or x.get("officer_staff_id")
+                    or x.get("registered_by")
+                    or "—",
+                }
+                for x in todays_records
+            ],
         }
+
+    def list_record_officer_today_records(self) -> list[dict[str, Any]]:
+        _require_conn()
+        today = date.today()
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT
+                        p.id,
+                        p.pid,
+                        p.first_name,
+                        p.last_name,
+                        p.other_names,
+                        p.gender,
+                        p.date_of_birth,
+                        p.created_at,
+                        p.registered_by,
+                        u.first_name AS officer_first_name,
+                        u.last_name AS officer_last_name,
+                        u.other_names AS officer_other_names,
+                        u.staff_id AS officer_staff_id
+                    FROM patients p
+                    LEFT JOIN users u ON u.staff_id = p.registered_by
+                    WHERE p.created_at::date = :d
+                    ORDER BY p.created_at DESC;
+                    """
+                ),
+                {"d": today},
+            ).mappings().all()
+
+        return [
+            {
+                "id": str(x["id"]),
+                "pid": x["pid"],
+                "name": f"{x['first_name']} {x['last_name']}".strip(),
+                "otherNames": x.get("other_names"),
+                "gender": x.get("gender"),
+                "dateOfBirth": x["date_of_birth"].isoformat()
+                if x.get("date_of_birth")
+                else None,
+                "date": x["created_at"].date().isoformat()
+                if x.get("created_at")
+                else None,
+                "time": x["created_at"].strftime("%H:%M:%S")
+                if x.get("created_at")
+                else None,
+                "registeredBy": " ".join(
+                    part
+                    for part in [
+                        x.get("officer_first_name"),
+                        x.get("officer_other_names"),
+                        x.get("officer_last_name"),
+                    ]
+                    if part
+                ).strip()
+                or x.get("officer_staff_id")
+                or x.get("registered_by")
+                or "—",
+            }
+            for x in rows
+        ]
 
 
 store = DbStore()

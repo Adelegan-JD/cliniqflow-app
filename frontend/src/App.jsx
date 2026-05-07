@@ -8,7 +8,9 @@ import {
   Navigate,
   Outlet,
   useLocation,
+  useNavigate,
 } from "react-router-dom";
+import { useEffect } from "react";
 import { LoginPage } from "./pages/Authentication/LoginPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Dashboard from "./pages/Admin/Dashboard";
@@ -32,17 +34,53 @@ import { NurseHelp } from "./pages/Nurse/Help";
 import RecordOfficerLayout from "./components/Layouts/RecordOfficerLayout";
 import RecordOfficerHelp from "./pages/RecordOfficers/RecordOfficerHelp";
 import RecordOfficerDashboard from "./pages/RecordOfficers/Dashboard";
+import RecordOfficerRecords from "./pages/RecordOfficers/Records";
 
 // Role-based redirect mapping
 const getRoleBasedRoute = (role) => {
   const roleRoutes = {
     admin: "/dashboard",
     nurse: "/nurse-dashboard",
-    // record_officer: "/record-officer",
+    record_officer: "/record-officer",
     doctor: "/doctors-dashboard",
   };
-  return roleRoutes[role] || "/";
+  return roleRoutes[role] || null;
 };
+
+const getUserRole = (user) =>
+  user?.user_metadata?.role || user?.app_metadata?.role || user?.role || null;
+
+const UnknownRoleRedirect = () => {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    (async () => {
+      await signOut();
+      if (isMounted) {
+        navigate("/login", { replace: true });
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [signOut, navigate]);
+
+  return (
+    <div className="h-screen w-full flex items-center justify-center">
+      <div className="text-center text-gray-700">
+        <p className="text-lg font-semibold">
+          Your account role is not set yet.
+        </p>
+        <p className="text-sm mt-2">Redirecting you to sign in again...</p>
+      </div>
+    </div>
+  );
+};
+
 function App() {
   const ProtectedRoute = () => {
     const { user, loading } = useAuth();
@@ -58,7 +96,11 @@ function App() {
     if (!user) return <Navigate to="/login" replace />;
 
     // if the authenticated user does not have the admin role, redirect
-    const role = user.user_metadata?.role || user.role;
+    const role = getUserRole(user);
+    if (!role) {
+      return <UnknownRoleRedirect />;
+    }
+
     if (role && role !== "admin") {
       let dest = "/dashboard"; // fallback
       if (role === "nurse") dest = "/nurse-dashboard";
@@ -85,11 +127,19 @@ function App() {
         </div>
       );
 
-    const userRole = user?.user_metadata?.role;
+    const userRole = getUserRole(user);
+
+    if (!userRole) {
+      return <UnknownRoleRedirect />;
+    }
 
     if (!allowedRoles.includes(userRole)) {
       const redirectUrl = getRoleBasedRoute(userRole);
-      return <Navigate to={redirectUrl} replace />;
+      return redirectUrl ? (
+        <Navigate to={redirectUrl} replace />
+      ) : (
+        <UnknownRoleRedirect />
+      );
     }
 
     return children;
@@ -100,9 +150,16 @@ function App() {
 
     if (loading) return null;
     if (user) {
-      const role = user?.user_metadata?.role || user?.role;
+      const role = getUserRole(user);
+      if (!role) {
+        return <UnknownRoleRedirect />;
+      }
       const redirectUrl = getRoleBasedRoute(role);
-      return <Navigate to={redirectUrl} replace />;
+      return redirectUrl ? (
+        <Navigate to={redirectUrl} replace />
+      ) : (
+        <UnknownRoleRedirect />
+      );
     }
 
     return children;
@@ -164,7 +221,11 @@ function App() {
               }
             >
               <Route index element={<RecordOfficerDashboard />} />
-              <Route path="/record-officer/help" element={<RecordOfficerHelp />} />
+              <Route path="records" element={<RecordOfficerRecords />} />
+              <Route
+                path="/record-officer/help"
+                element={<RecordOfficerHelp />}
+              />
             </Route>
             <Route
               path="/doctors-dashboard"

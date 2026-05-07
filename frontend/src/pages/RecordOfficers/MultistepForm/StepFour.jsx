@@ -1,7 +1,9 @@
 import React from "react";
 import { AlertCircle } from "lucide-react";
+import Input from "../../../components/ui/Input";
+import Select from "../../../components/ui/Select";
 
-export const Step4NextOfKin = () => {
+export const Step4NextOfKin = ({ formData, handleChange, errors = {} }) => {
   return (
     <div className="animate-fadeIn">
       <div className="mb-6">
@@ -21,47 +23,49 @@ export const Step4NextOfKin = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 relative z-10">
-          <div>
-            <label className="block text-sm font-medium text-amber-900 mb-1">
-              Full Name *
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Adewale Johnson"
-              className="w-full rounded-lg border-amber-200 bg-white border px-4 py-2.5 focus:ring-2 focus:ring-amber-500 outline-none transition-shadow"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-amber-900 mb-1">
-              Relationship *
-            </label>
-            <select className="w-full rounded-lg border-amber-200 bg-white border px-4 py-2.5 text-gray-700 focus:ring-2 focus:ring-amber-500 outline-none">
-              <option>Select Relationship</option>
-              <option>Spouse</option>
-              <option>Parent</option>
-              <option>Sibling</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-amber-900 mb-1">
-              Phone Number *
-            </label>
-            <input
-              type="tel"
-              placeholder="08011122233"
-              className="w-full rounded-lg border-amber-200 bg-white border px-4 py-2.5 focus:ring-2 focus:ring-amber-500 outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-amber-900 mb-1">
-              Residential Address *
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. 5 Ogun Street, Ikeja"
-              className="w-full rounded-lg border-amber-200 bg-white border px-4 py-2.5 focus:ring-2 focus:ring-amber-500 outline-none"
-            />
-          </div>
+          <Input
+            label="Full Name"
+            name="nokName"
+            value={formData.nokName}
+            onChange={handleChange}
+            placeholder="e.g. Adewale Johnson"
+            error={errors.nokName}
+            required
+          />
+          <Select
+            label="Relationship"
+            name="nokRelationship"
+            value={formData.nokRelationship}
+            onChange={handleChange}
+            options={[
+              { value: "Parent", label: "Parent" },
+              { value: "Sibling", label: "Sibling" },
+              { value: "Spouse", label: "Spouse" },
+              { value: "Child", label: "Child" },
+              { value: "Friend", label: "Friend" },
+              { value: "Other", label: "Other" },
+            ]}
+            error={errors.nokRelationship}
+            required
+          />
+          <Input
+            label="Phone Number"
+            name="nokPhone"
+            type="tel"
+            value={formData.nokPhone}
+            onChange={handleChange}
+            placeholder="08011122233"
+            error={errors.nokPhone}
+            required
+          />
+          <Input
+            label="Residential Address"
+            name="nokAddress"
+            value={formData.nokAddress}
+            onChange={handleChange}
+            placeholder="e.g. 5 Ogun Street, Ikeja"
+            error={errors.nokAddress}
+          />
         </div>
       </div>
     </div>

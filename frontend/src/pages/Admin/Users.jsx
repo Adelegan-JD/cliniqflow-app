@@ -28,15 +28,35 @@ export const Users = () => {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-
-    if (!users[0] && !adminError){
+    if (!users[0] && !adminError) {
       fetchUsers();
     }
   }, []);
+  const validateForm = () => {
+    const { name, email, password, role } = formData;
+
+    if (!name.trim()) return "Full name is required.";
+    if (name.length < 3) return "Name must be at least 3 characters.";
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return "Please enter a valid email address.";
+
+    if (password.length < 8) return "Password must be at least 8 characters.";
+
+    if (!role) return "Please select an assigned role.";
+
+    return null; // No errors
+  };
 
   async function handleSubmit() {
     if (adminError) {
       setError("Admin service unavailable. Cannot add user.");
+      return;
+    }
+    // 2. Client-side Validation
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -76,7 +96,12 @@ export const Users = () => {
         role: "",
       });
     } catch (error) {
-      setError(error?.message);
+      // Handle validation errors from backend
+      const errorMsg =
+        error?.response?.data?.error?.message ||
+        error?.message ||
+        "Failed to add user";
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

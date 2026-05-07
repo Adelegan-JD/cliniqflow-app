@@ -1,7 +1,9 @@
 import React from "react";
 import { ShieldCheck, Briefcase } from "lucide-react";
+import Input from "../../../components/ui/Input";
+import Select from "../../../components/ui/Select";
 
-export const Step3Statutory = () => {
+export const Step3Statutory = ({ formData, handleChange, errors = {} }) => {
   return (
     <div className="animate-fadeIn">
       <div className="mb-6">
@@ -19,36 +21,30 @@ export const Step3Statutory = () => {
           <h3 className="font-semibold">Identification Documents</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              NIN
-            </label>
-            <input
-              type="text"
-              placeholder="11 digits"
-              className="w-full rounded-lg border-gray-300 border px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              NHIS Number
-            </label>
-            <input
-              type="text"
-              placeholder="Optional"
-              className="w-full rounded-lg border-gray-300 border px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Military Number
-            </label>
-            <input
-              type="text"
-              placeholder="If applicable"
-              className="w-full rounded-lg border-gray-300 border px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-          </div>
+          <Input
+            label="NIN"
+            name="nin"
+            value={formData.nin}
+            onChange={handleChange}
+            placeholder="11 digits"
+            error={errors.nin}
+          />
+          <Input
+            label="NHIS Number"
+            name="nhisNumber"
+            value={formData.nhisNumber}
+            onChange={handleChange}
+            placeholder="Optional"
+            error={errors.nhisNumber}
+          />
+          <Input
+            label="Military Number"
+            name="militaryNumber"
+            value={formData.militaryNumber}
+            onChange={handleChange}
+            placeholder="If applicable"
+            error={errors.militaryNumber}
+          />
         </div>
       </div>
 
@@ -58,27 +54,28 @@ export const Step3Statutory = () => {
           <h3 className="font-semibold">Socio-Economic Info</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Highest Education
-            </label>
-            <select className="w-full rounded-lg border-gray-300 border px-4 py-2.5 text-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
-              <option>Select Education</option>
-              <option>BSc</option>
-              <option>Masters</option>
-              <option>SSCE</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Occupation
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Software Engineer"
-              className="w-full rounded-lg border-gray-300 border px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-          </div>
+          <Select
+            label="Highest Education"
+            name="education"
+            value={formData.education}
+            onChange={handleChange}
+            options={[
+              { value: "None", label: "None" },
+              { value: "Primary", label: "Primary" },
+              { value: "Secondary", label: "Secondary" },
+              { value: "Tertiary", label: "Tertiary" },
+              { value: "Post-Graduate", label: "Post-Graduate" },
+            ]}
+            error={errors.education}
+          />
+          <Input
+            label="Occupation"
+            name="occupation"
+            value={formData.occupation}
+            onChange={handleChange}
+            placeholder="e.g. Software Engineer"
+            error={errors.occupation}
+          />
         </div>
       </div>
 
@@ -95,7 +92,7 @@ export const Step3Statutory = () => {
             <input
               type="text"
               disabled
-              defaultValue="30/03/2026"
+              value={formData.regDate}
               className="w-full rounded-lg bg-white border border-blue-100 px-4 py-2.5 text-gray-500 cursor-not-allowed shadow-sm"
             />
           </div>
@@ -106,7 +103,7 @@ export const Step3Statutory = () => {
             <input
               type="text"
               disabled
-              defaultValue="Faith Peace"
+              value={formData.regBy}
               className="w-full rounded-lg bg-white border border-blue-100 px-4 py-2.5 text-gray-500 cursor-not-allowed shadow-sm"
             />
           </div>

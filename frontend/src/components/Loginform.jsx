@@ -23,8 +23,10 @@ const LoginForm = () => {
     e.preventDefault();
     try {
       const user = await login(formData);
-      // after successful login, redirect based on user role metadata
-      const role = user?.user_metadata?.role || user?.role;
+      // Extract role from metadata (now available from getUser() call in authStore)
+      const role =
+        user?.user_metadata?.role || user?.app_metadata?.role || user?.role;
+
       switch (role) {
         case "nurse":
           navigate("/nurse-dashboard", { replace: true });
@@ -33,11 +35,13 @@ const LoginForm = () => {
           navigate("/doctors-dashboard", { replace: true });
           break;
         case "record_officer":
-        case "record officer":
           navigate("/record-officer", { replace: true });
           break;
+        case "admin":
+          navigate("/dashboard", { replace: true });
+          break;
         default:
-          // default to admin dashboard
+          // default to admin dashboard for unknown roles
           navigate("/dashboard", { replace: true });
           break;
       }

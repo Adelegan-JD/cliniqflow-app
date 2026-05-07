@@ -1,10 +1,7 @@
-import MultiStepRegistration from "./MultistepForm/MultiStepForm"
-
+import MultiStepRegistration from "./MultistepForm/MultiStepForm";
 
 const RecordOfficerDashboard = () => {
-  return (
-    <MultiStepRegistration />
-  )
-}
+  return <MultiStepRegistration />;
+};
 
-export default RecordOfficerDashboard
+export default RecordOfficerDashboard;

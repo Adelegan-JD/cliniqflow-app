@@ -267,7 +267,7 @@ const RecordingSession = () => {
             }
             className="px-5 py-2.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors"
           >
-            Cheak SOAP
+            Check SOAP
           </button>
         </div>
       </section>
