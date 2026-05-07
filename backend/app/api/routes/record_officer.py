@@ -53,6 +53,13 @@ def search_patients(
     return store.search_patients(q, search_by)
 
 
+@router.get("/records", response_model=list[dict[str, Any]])
+def today_records(
+    _user: Annotated[CurrentUser, Depends(require_roles(ROLE_RECORD_OFFICER, ROLE_ADMIN))],
+) -> list[dict[str, Any]]:
+    return store.list_record_officer_today_records()
+
+
 @router.post("/register-patient")
 def register_patient(
     body: RegisterPatientBody,

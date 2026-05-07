@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "../Sidebar";
 import { HelpCircle, LayoutDashboard, Search } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -14,6 +14,12 @@ export default function RecordOfficerLayout() {
       url: "/record-officer",
     },
     {
+      id: "records",
+      label: "Records",
+      icon: <Search size={20} />,
+      url: "/record-officer/records",
+    },
+    {
       id: "help",
       label: "Help & Support",
       icon: <HelpCircle size={20} />,
@@ -22,6 +28,7 @@ export default function RecordOfficerLayout() {
   ];
 
   const [activePage, setActivePage] = useState("record-officer");
+  const location = useLocation();
 
   useEffect(() => {
     const path = location.pathname;
@@ -60,19 +67,17 @@ export default function RecordOfficerLayout() {
 
           <div className="flex items-center gap-4 ml-auto">
             <div className="text-right">
-              <p className="text-sm font-bold text-gray-800">
-                Mikel Arteta
-              </p>
+              <p className="text-sm font-bold text-gray-800"></p>
               <p className="text-xs text-gray-500">{userProfile.role}</p>
             </div>
-            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold">
-              {'Mikel Arteta'.slice(0, 2).toUpperCase() || "RO"}
-            </div>
+            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold"></div>
           </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-5xl mx-auto"><Outlet /></div>
+          <div className="max-w-5xl mx-auto">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

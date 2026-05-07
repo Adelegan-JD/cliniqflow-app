@@ -10,11 +10,12 @@ const Sidebar = ({
   activeItem,
   onNavigate,
   userProfile,
+  warningMessage,
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { logout } = useAuthStore();
-  const { reset } = useAdminStore()
+  const { reset } = useAdminStore();
 
   // Toggle sidebar width (Desktop)
   const toggleSidebar = () => setIsExpanded(!isExpanded);
@@ -54,8 +55,46 @@ const Sidebar = ({
 
           {/* 2. NAVIGATION LINKS */}
           <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4">
+            {warningMessage && (
+              <div className="mx-3 mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {warningMessage}
+              </div>
+            )}
             <ul className="space-y-1 px-3">
               {menuItems.map((item, index) => {
+                if (item?.disabled) {
+                  return (
+                    <li key={item.id || index}>
+                      <div
+                        title={
+                          item.disabledReason || `${item.label} unavailable`
+                        }
+                        className="relative flex items-center w-full p-3 rounded-lg text-gray-400 bg-gray-100/80 cursor-not-allowed"
+                        aria-disabled="true"
+                      >
+                        <span className="flex items-center justify-center">
+                          {item.icon}
+                        </span>
+
+                        <span
+                          className={`
+                          ml-3 font-medium transition-all duration-200 overflow-hidden whitespace-nowrap
+                          ${isExpanded ? "w-auto opacity-100" : "w-0 opacity-0 sm:hidden"}
+                        `}
+                        >
+                          {item.label}
+                        </span>
+
+                        {!isExpanded && (
+                          <div className="absolute left-full rounded-md px-2 py-1 ml-6 bg-gray-900 text-white text-xs opacity-0 -translate-x-3 transition-all group-hover:visible group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap z-50 invisible sm:block">
+                            {item.label}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                }
+
                 return (
                   <li key={item.id || index}>
                     <NavLink
@@ -67,7 +106,10 @@ const Sidebar = ({
                         setIsMobileOpen(false); // Close mobile menu on click
                       }}
                       className={({ isActive }) => {
-                        const active = activeItem != null ? activeItem === item.id : isActive;
+                        const active =
+                          activeItem != null
+                            ? activeItem === item.id
+                            : isActive;
                         return `relative flex items-center w-full p-3 rounded-lg transition-colors group ${active ? "bg-blue-50 text-blue-600" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`;
                       }}
                     >

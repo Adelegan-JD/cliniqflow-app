@@ -100,6 +100,38 @@ Typical flow:
 Staff IDs use role-based prefixes such as `ADM-xxxx`, `DOC-xxxx`, `NUR-xxxx`, and `REC-xxxx`.
 Patient IDs use `PID` with a date-based code and random digits.
 
+## Production verification
+
+To verify the live patient-registration flow end-to-end, send a real Supabase JWT in the `Authorization` header and post to the production API.
+
+Example request payload:
+
+```json
+{
+  "firstName": "Ada",
+  "lastName": "Okafor",
+  "dob": "1994-05-12",
+  "gender": "Female",
+  "phone": "08012345678",
+  "address": "12 Unity Road, Lagos",
+  "nokName": "Chinedu Okafor",
+  "nokRelationship": "Brother",
+  "nokPhone": "08087654321",
+  "email": "ada@example.com",
+  "state": null,
+  "lga": null,
+  "nokAddress": null
+}
+```
+
+The backend will:
+
+- create a row in `patients`
+- create a row in `patients_metadata` when metadata is present
+- attach `registered_by` to the authenticated record officer’s `staff_id`
+
+If the request succeeds, the API returns the new `pid` and patient `id`.
+
 ## Integration Notes
 
 This folder is designed as the core backend module for CliniqFlow.
@@ -127,6 +159,7 @@ For local validation, ensure the database connection works and the schema can be
 ## License
 
 Use this backend code according to your project policies.
+
 # Backend
 
 FastAPI service. Runs on **port 8000** by default.
@@ -146,9 +179,8 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-- **Docs:** http://127.0.0.1:8000/docs  
+- **Docs:** http://127.0.0.1:8000/docs
 - **Health:** http://127.0.0.1:8000/health (`persistence` is `postgres` only if `DATABASE_URL` is set)
-
 
 ## Tests
 

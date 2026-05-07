@@ -22,7 +22,12 @@ app = FastAPI(
     version="0.1.0",
 )
 
-origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+#origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+
+origins = [
+    "http://192.168.18.9:5173",  # Your Vite frontend IP
+    "http://localhost:5173",     # Localhost frontend
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins or ["http://localhost:5173"],
@@ -53,5 +58,5 @@ async def http_exception_handler(_request, exc: HTTPException) -> JSONResponse:
     )
 
 
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler) #type: ignore
 app.add_exception_handler(Exception, generic_exception_handler)
