@@ -1,6 +1,15 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Mic, MicOff, BotMessageSquare, AudioLines } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  BotMessageSquare,
+  AudioLines,
+  X,
+  Loader2,
+} from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { toast } from "react-toastify";
+import { api } from "../../utils/api";
 
 const RecordingSession = () => {
   const navigate = useNavigate();
@@ -17,6 +26,7 @@ const RecordingSession = () => {
 
   const [isRecording, setIsRecording] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isEnding, setIsEnding] = useState(false);
   const [error, setError] = useState("");
   const [interimText, setInterimText] = useState("");
   const [messages, setMessages] = useState([]);
@@ -146,6 +156,30 @@ const RecordingSession = () => {
     setInterimText("");
   };
 
+  const handleEndConsultation = async () => {
+    if (!patient?.patientId || !patient?.sessionId) {
+      toast.error("Patient ID or Session ID is missing");
+      return;
+    }
+
+    setIsEnding(true);
+    try {
+      await api.post(
+        `/doctor/end-consultation?visit_id=${encodeURIComponent(
+          patient.sessionId || sessionId,
+        )}`,
+      );
+      toast.success("Consultation ended successfully");
+      setTimeout(() => {
+        navigate("/doctors-dashboard", { replace: true });
+      }, 1000);
+    } catch (err) {
+      toast.error(err?.message || "Failed to end consultation");
+    } finally {
+      setIsEnding(false);
+    }
+  };
+
   return (
     <div className="flex flex-col flex-1 p-4 overflow-auto gap-6">
       <header className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -154,7 +188,10 @@ const RecordingSession = () => {
         </h1>
         <div className="text-gray-600 mt-1 space-y-1">
           <p>
-            Patient: <span className="font-semibold">{patient?.name}</span>
+            Patient:{" "}
+            <span className="font-semibold">
+              {patient?.name || "Unknown Patient"}
+            </span>
           </p>
           <p className="text-sm">
             Patient ID:{" "}
@@ -227,7 +264,7 @@ const RecordingSession = () => {
           Real-time Speech to Text
         </h2>
 
-        <div className="h-[340px] overflow-y-auto rounded-lg border border-gray-200 p-4 bg-gray-50 space-y-3">
+        <div className="h-85 overflow-y-auto rounded-lg border border-gray-200 p-4 bg-gray-50 space-y-3">
           {messages.length === 0 && !interimText ? (
             <div className="text-sm text-gray-500">
               Transcript will appear here as a chat-style conversation.
@@ -252,7 +289,24 @@ const RecordingSession = () => {
           ) : null}
         </div>
 
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex justify-end gap-3">
+          <button
+            onClick={handleEndConsultation}
+            disabled={isEnding}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isEnding ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                Ending...
+              </>
+            ) : (
+              <>
+                <X size={18} />
+                End Consultation
+              </>
+            )}
+          </button>
           <button
             onClick={() =>
               navigate(

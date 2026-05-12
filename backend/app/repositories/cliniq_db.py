@@ -719,6 +719,48 @@ class DbStore:
                 return None
         return self.get_visit(visit_key)
 
+    def end_consultation(self, visit_key: str) -> dict[str, Any] | None:
+        """End consultation: mark visit as completed and queue as discharged."""
+        _require_conn()
+        with engine.begin() as conn:
+            v = _resolve_visit(conn, visit_key)
+            if not v:
+                return None
+            
+            # Update visitation status to completed
+            conn.execute(
+                text(
+                    """
+                    UPDATE visitations SET
+                        status = 'completed',
+                        departure_time = NOW(),
+                        updated_at = NOW()
+                    WHERE id = :vid;
+                    """
+                ),
+                {"vid": v["id"]},
+            )
+            
+            # Update queue to completed and discharged
+            qrow = conn.execute(
+                text(
+                    """
+                    UPDATE queue SET
+                        status = 'completed',
+                        current_stage = 'discharged',
+                        completed_at = NOW()
+                    WHERE visit_id = :vid
+                    RETURNING id;
+                    """
+                ),
+                {"vid": v["id"]},
+            ).scalar()
+            
+            if not qrow:
+                return None
+        
+        return self.get_visit(visit_key)
+
     def doctor_dashboard_stats(self) -> dict[str, int]:
         _require_conn()
         today = date.today()

@@ -100,6 +100,21 @@ def cancel_exam(
     return row
 
 
+@router.post("/end-consultation")
+def end_consultation(
+    _user: Annotated[CurrentUser, Depends(require_roles(ROLE_DOCTOR))],
+    visit_id: str = Query(..., min_length=1),
+) -> dict[str, Any]:
+    """End consultation and mark visit as completed."""
+    row = store.end_consultation(visit_id)
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Visit not found or not in consultation",
+        )
+    return row
+
+
 @router.get("/examination-records", response_model=list[dict[str, Any]])
 def examination_records(
     _user: Annotated[CurrentUser, Depends(require_roles(ROLE_DOCTOR))],
