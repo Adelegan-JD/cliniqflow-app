@@ -1,4 +1,5 @@
 import { getToken } from "./uitils";
+import { supabase } from "./supabaseClient";
 
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -7,10 +8,28 @@ const buildAuthHeaders = async () => {
   if (!token) {
     throw new Error("Not authenticated. Please sign in again.");
   }
-  return {
+
+  const headers = {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
+
+  // Extract user role from Supabase session and send as debug header
+  // (backend uses this when cliniq_dev_bypass_auth is enabled)
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
+    const role = user?.user_metadata?.role || user?.app_metadata?.role;
+    if (role) {
+      headers["X-Debug-Role"] = role;
+    }
+  } catch (e) {
+    console.debug("Could not extract role from Supabase session:", e);
+  }
+
+  return headers;
 };
 
 const api = {
