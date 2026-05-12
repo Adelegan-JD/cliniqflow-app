@@ -73,7 +73,10 @@ def register_patient(
     _user: Annotated[CurrentUser, Depends(require_roles(ROLE_RECORD_OFFICER))],
 ) -> dict[str, Any]:
     data = body.model_dump()
-    row = store.register_patient(data, registered_by=_user.staff_id)
+    try:
+        row = store.register_patient(data, registered_by=_user.staff_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return {"pid": row["pid"], "id": row["id"], **row}
 
 

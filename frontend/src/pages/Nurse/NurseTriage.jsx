@@ -114,6 +114,8 @@ const NurseTriage = () => {
     } catch (error) {
       console.error("Triage save failed", error);
       alert(`Failed to save triage. Try again. ${error?.message || ""}`);
+      // rethrow so callers (forms) can react (e.g., show toasts / re-enable buttons)
+      throw error;
     }
   };
 

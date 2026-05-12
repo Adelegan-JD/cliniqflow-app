@@ -26,7 +26,10 @@ def create_patient(
 ) -> dict[str, Any]:
     """Same behaviour as POST /record-officer/register-patient for REST-style clients."""
     data = body.model_dump()
-    row = store.register_patient(data, registered_by=_user.staff_id)
+    try:
+        row = store.register_patient(data, registered_by=_user.staff_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return {"pid": row["pid"], "id": row["id"], **row}
 
 

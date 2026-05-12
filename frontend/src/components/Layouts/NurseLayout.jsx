@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   ClipboardList,
   Clock,
+  CheckCircle2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useUserProfile } from "../../hooks/useUserProfile";
@@ -23,6 +24,12 @@ export default function NurseLayout() {
       label: "Triage Queue",
       icon: <Clock size={20} />,
       url: "/nurse-dashboard/triage-queue",
+    },
+    {
+      id: "nurse-triage-results",
+      label: "Triage Results",
+      icon: <CheckCircle2 size={20} />,
+      url: "/nurse-dashboard/triage-results",
     },
     {
       id: "nurse-records",
@@ -46,6 +53,8 @@ export default function NurseLayout() {
       setActivePage("nurse-dashboard");
     else if (path.startsWith("/nurse-dashboard/triage-queue"))
       setActivePage("nurse-triage-queue");
+    else if (path.startsWith("/nurse-dashboard/triage-results"))
+      setActivePage("nurse-triage-results");
     else if (path.startsWith("/nurse-dashboard/records"))
       setActivePage("nurse-records");
     else if (path.startsWith("/nurse-dashboard/help")) setActivePage("help");

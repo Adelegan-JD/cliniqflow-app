@@ -110,6 +110,20 @@ def _resolve_staff_id_by_email(email: str | None) -> str | None:
     return row["staff_id"] if row else None
 
 
+def _decode_unverified_payload(token: str) -> dict | None:
+    try:
+        return jwt.decode(
+            token,
+            options={
+                "verify_signature": False,
+                "verify_aud": False,
+                "verify_exp": False,
+            },
+        )
+    except jwt.InvalidTokenError:
+        return None
+
+
 def get_current_user(
     creds: HTTPAuthorizationCredentials | None = Depends(security),
     x_debug_role: Annotated[str | None, Header()] = None,
@@ -125,10 +139,16 @@ def get_current_user(
 
     if settings.cliniq_dev_bypass_auth:
         role = _normalize_role(x_debug_role or "admin")
-        sid = x_debug_staff_id or "DEV-STAFF-0001"
+        payload = _decode_unverified_payload(token)
+        email = None
+        if isinstance(payload, dict):
+            raw_email = payload.get("email")
+            if isinstance(raw_email, str) and raw_email.strip():
+                email = raw_email.strip()
+        sid = _resolve_staff_id_by_email(email) or x_debug_staff_id or "DEV-STAFF-0001"
         return CurrentUser(
-            id=x_debug_user_id or "dev-user",
-            email="dev@local",
+            id=x_debug_user_id or str((payload or {}).get("sub") or "dev-user"),
+            email=email or "dev@local",
             role=role,
             staff_id=sid,
         )

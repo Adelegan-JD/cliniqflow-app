@@ -6,6 +6,8 @@ import {
   Clock3,
   ClipboardCheck,
   UsersRound,
+  ArrowRight,
+  AlertCircle,
 } from "lucide-react";
 import WelcomeBanner from "../../components/WelcomeBanner";
 import { useUserProfile } from "../../hooks/useUserProfile";
@@ -215,30 +217,38 @@ export const NurseDashboard = () => {
   );
 
   return (
-    <div className="transition-all duration-300 p-4 overflow-auto w-full">
+    <div className="transition-all duration-300 p-4 md:p-6 overflow-auto w-full">
       <header className="mb-8">
         <WelcomeBanner user={userProfile} />
-        <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
-          <Activity className="text-blue-600" />
-          Nurse Dashboard
-        </h1>
-        <p className="text-gray-500 mt-1">
-          Welcome {userProfile?.name || "Nurse"}, here is your current triage
-          overview.
-        </p>
+        <div className="flex items-center gap-3 mt-6">
+          <div className="p-3 bg-blue-50 rounded-xl">
+            <Activity className="text-blue-600" size={32} />
+          </div>
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
+              Nurse Dashboard
+            </h1>
+            <p className="text-gray-600 mt-1">
+              Welcome {userProfile?.name || "Nurse"}, here's your triage
+              overview.
+            </p>
+          </div>
+        </div>
       </header>
 
       {error ? (
-        <div className="mb-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
-          {error}
+        <div className="alert alert-warning mb-6">
+          <AlertCircle size={20} className="shrink-0" />
+          <div>
+            <p className="font-semibold">Warning</p>
+            <p className="text-sm">{error}</p>
+          </div>
         </div>
       ) : null}
 
-      <section className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">
-          Today's Overview
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+      <section className="mb-8">
+        <h2 className="section-title">Today's Overview</h2>
+        <div className="grid-responsive">
           {cards.map((card) => (
             <StatCard
               key={card.title}
@@ -251,153 +261,22 @@ export const NurseDashboard = () => {
         </div>
       </section>
 
-      <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-700">Triage Queue</h2>
-          <span className="text-sm text-gray-500">
-            {
-              triageQueue.filter((item) => item.status === "awaiting_triage")
-                .length
-            }{" "}
-            waiting
-          </span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-full">
-            <thead className="bg-gray-50 text-gray-600 text-sm uppercase tracking-wider">
-              <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Age</th>
-                <th className="px-4 py-3">Sex</th>
-                <th className="px-4 py-3">Urgency</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {triageQueue.map((patient) => (
-                <tr key={patient.patientId} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">
-                    {patient.name}
-                  </td>
-                  <td className="px-4 py-3 text-gray-700">{patient.age}</td>
-                  <td className="px-4 py-3 text-gray-700">{patient.sex}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-semibold uppercase ${
-                        patient.urgency === "critical"
-                          ? "bg-red-100 text-red-700 border border-red-200"
-                          : patient.urgency === "emergency"
-                            ? "bg-red-100 text-red-700 border border-red-200"
-                            : patient.urgency === "urgent"
-                              ? "bg-amber-100 text-amber-700 border border-amber-200"
-                              : "bg-green-100 text-green-700 border border-green-200"
-                      }`}
-                    >
-                      {patient.urgency || "normal"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        patient.status === "triaged"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-amber-100 text-amber-700"
-                      }`}
-                    >
-                      {patient.status.replace("_", " ")}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {patient.status === "awaiting_triage" ? (
-                      <button
-                        onClick={() => handleStartTriage(patient)}
-                        className="px-3 py-1 rounded-md text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition"
-                      >
-                        Start Triage
-                      </button>
-                    ) : (
-                      <span className="px-3 py-1 rounded-md text-sm font-semibold bg-gray-100 text-gray-600">
-                        {patient.urgency
-                          ? patient.urgency.toUpperCase()
-                          : "TRIAGED"}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {triageQueue.length === 0 && (
-                <tr>
-                  <td className="px-4 py-3 text-gray-500" colSpan={6}>
-                    No patients in triage queue.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-700">
-            Triage Results
-          </h2>
-          <span className="text-sm text-gray-500">
-            {triageRecords.length} records
-          </span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-full">
-            <thead className="bg-gray-50 text-gray-600 text-sm uppercase tracking-wider">
-              <tr>
-                <th className="px-4 py-3">Patient</th>
-                <th className="px-4 py-3">Urgency</th>
-                <th className="px-4 py-3">Triaged At</th>
-                <th className="px-4 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {triageRecords.length > 0 ? (
-                triageRecords.map((r) => (
-                  <tr key={r.id || r.patientId} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-900 font-medium">
-                      {r.name || r.patientId}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold uppercase ${
-                          r.urgencyLevel === "critical" ||
-                          r.urgencyLevel === "emergency"
-                            ? "bg-red-100 text-red-700 border border-red-200"
-                            : r.urgencyLevel === "urgent"
-                              ? "bg-amber-100 text-amber-700 border border-amber-200"
-                              : "bg-green-100 text-green-700 border border-green-200"
-                        }`}
-                      >
-                        {r.urgencyLevel || "normal"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">
-                      {new Date(r.triagedAt).toLocaleString() || "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
-                        Triaged
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td className="px-4 py-3 text-gray-500" colSpan={4}>
-                    No triage results yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      <section className="mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <QuickActionCard
+            title="Start Triage"
+            description="Begin triaging waiting patients"
+            icon={<ClipboardCheck size={24} />}
+            color="bg-blue-500"
+            href="/nurse-dashboard/triage-queue"
+          />
+          <QuickActionCard
+            title="View Records"
+            description="Check triaged patient records"
+            icon={<CheckCircle2 size={24} />}
+            color="bg-emerald-500"
+            href="/nurse-dashboard/records"
+          />
         </div>
       </section>
     </div>
@@ -405,20 +284,46 @@ export const NurseDashboard = () => {
 };
 
 const StatCard = ({ title, count, icon, color }) => (
-  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 relative overflow-hidden group">
-    <div
-      className={`absolute right-0 top-0 w-24 h-24 transform translate-x-8 -translate-y-8 rounded-full opacity-10 ${color}`}
-    />
-    <div className="relative z-10 flex justify-between items-start">
-      <div>
-        <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
-          {title}
-        </p>
-        <h3 className="text-3xl font-bold text-gray-900 mt-2">{count}</h3>
-      </div>
-      <div className={`p-3 rounded-lg text-white shadow-lg ${color}`}>
+  <div className="stat-card">
+    <div className="flex items-center gap-3">
+      <div
+        className="stat-card-icon"
+        style={{ background: color + "20", color }}
+      >
         {icon}
+      </div>
+      <div className="flex-1">
+        <p className="stat-card-label">{title}</p>
+        <p className="stat-card-value">{count}</p>
       </div>
     </div>
   </div>
+);
+
+const QuickActionCard = ({ title, description, icon, color, href }) => (
+  <a
+    href={href}
+    className="group card elevated p-6 hover:shadow-lg transition-all duration-300 transform hover:scale-105 cursor-pointer"
+  >
+    <div className="flex items-start justify-between">
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+          {title}
+        </h3>
+        <p className="text-gray-600 text-sm mt-1">{description}</p>
+      </div>
+      <div
+        className={`p-3 rounded-lg text-white ${color} group-hover:shadow-lg transition-all`}
+      >
+        {icon}
+      </div>
+    </div>
+    <div className="mt-4 flex items-center gap-2 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+      <span className="text-sm font-semibold">Go to page</span>
+      <ArrowRight
+        size={16}
+        className="group-hover:translate-x-1 transition-transform"
+      />
+    </div>
+  </a>
 );
