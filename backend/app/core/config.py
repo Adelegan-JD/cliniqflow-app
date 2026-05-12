@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     # Comma-separated origins for CORS
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     # When true, accept any Bearer token and use X-Debug-Role / X-Debug-User-Id (local only)
-    cliniq_dev_bypass_auth: bool = True
+    # Keep this OFF by default so production always uses real authentication.
+    cliniq_dev_bypass_auth: bool = False
 
     @property
     def resolved_supabase_jwt_issuer(self) -> str:

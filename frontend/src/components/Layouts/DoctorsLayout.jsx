@@ -1,6 +1,11 @@
 import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "../Sidebar";
-import { LayoutDashboard, ListFilterIcon, ClipboardList } from "lucide-react";
+import {
+  LayoutDashboard,
+  ListFilterIcon,
+  ClipboardList,
+  FileText,
+} from "lucide-react";
 import { useState, useEffect } from "react";
 import { useUserProfile } from "../../hooks/useUserProfile";
 
@@ -20,9 +25,15 @@ export default function DoctorsLayout() {
       url: "/doctors-dashboard/patients_queue",
     },
     {
+      id: "nurse_queue",
+      label: "Nurse Triage Queue",
+      icon: <ClipboardList size={20} />,
+      url: "/doctors-dashboard/nurse-queue",
+    },
+    {
       id: "doctor-records",
       label: "Records",
-      icon: <ClipboardList size={20} />,
+      icon: <FileText size={20} />,
       url: "/doctors-dashboard/records",
     },
   ];
@@ -40,6 +51,8 @@ export default function DoctorsLayout() {
       path.startsWith("/doctors-dashboard/soap")
     )
       setActivePage("patients_queue");
+    else if (path.startsWith("/doctors-dashboard/nurse-queue"))
+      setActivePage("nurse_queue");
     else if (path.startsWith("/doctors-dashboard/records"))
       setActivePage("doctor-records");
   }, [location.pathname]);
