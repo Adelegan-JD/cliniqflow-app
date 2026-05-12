@@ -1,6 +1,11 @@
 import { Outlet } from "react-router-dom";
 import Sidebar from "../Sidebar";
-import { HelpCircle, LayoutDashboard } from "lucide-react";
+import {
+  HelpCircle,
+  LayoutDashboard,
+  ClipboardList,
+  Clock,
+} from "lucide-react";
 import { useState, useEffect } from "react";
 import { useUserProfile } from "../../hooks/useUserProfile";
 
@@ -12,6 +17,18 @@ export default function NurseLayout() {
       label: "Dashboard",
       icon: <LayoutDashboard size={20} />,
       url: "/nurse-dashboard",
+    },
+    {
+      id: "nurse-triage-queue",
+      label: "Triage Queue",
+      icon: <Clock size={20} />,
+      url: "/nurse-dashboard/triage-queue",
+    },
+    {
+      id: "nurse-records",
+      label: "Records",
+      icon: <ClipboardList size={20} />,
+      url: "/nurse-dashboard/records",
     },
     {
       id: "help",
@@ -27,11 +44,10 @@ export default function NurseLayout() {
     const path = location.pathname;
     if (path === "/nurse-dashboard" || path === "/nurse-dashboard/")
       setActivePage("nurse-dashboard");
-    else if (path.startsWith("/nurse-dashboard/users")) setActivePage("users");
+    else if (path.startsWith("/nurse-dashboard/triage-queue"))
+      setActivePage("nurse-triage-queue");
     else if (path.startsWith("/nurse-dashboard/records"))
-      setActivePage("records");
-    else if (path.startsWith("/nurse-dashboard/settings"))
-      setActivePage("settings");
+      setActivePage("nurse-records");
     else if (path.startsWith("/nurse-dashboard/help")) setActivePage("help");
   }, [location.pathname]);
 

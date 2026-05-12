@@ -39,9 +39,10 @@ const NurseTriage = () => {
 
   const handleSave = async (id, vitals, triageStatus) => {
     const payload = {
-      patientId: patient.patientId || id,
+      visit_id: patient.visit_id || patient.visitId || null,
+      patient_id: patient.patientId || patient.patient_id || id,
       vitals,
-      triageStatus: triageStatus || "normal",
+      urgency_level: triageStatus || "normal",
     };
 
     try {
@@ -69,18 +70,20 @@ const NurseTriage = () => {
 
         if (updateError) throw updateError;
 
-        const { error: recordError } = await supabase.from("nurse_triage_records").insert([
-          {
-            patientId: payload.patientId,
-            patient_id: payload.patientId,
-            name: patient.name,
-            age: patient.age,
-            sex: patient.sex,
-            urgencyLevel: payload.triageStatus,
-            vitals,
-            triagedAt: new Date().toISOString(),
-          },
-        ]);
+        const { error: recordError } = await supabase
+          .from("nurse_triage_records")
+          .insert([
+            {
+              patientId: payload.patientId,
+              patient_id: payload.patientId,
+              name: patient.name,
+              age: patient.age,
+              sex: patient.sex,
+              urgencyLevel: payload.triageStatus,
+              vitals,
+              triagedAt: new Date().toISOString(),
+            },
+          ]);
 
         if (recordError) throw recordError;
 
@@ -97,8 +100,8 @@ const NurseTriage = () => {
         triagedPatient = {
           ...patient,
           status: "triaged",
-          urgency: result.patient?.urgency || payload.triageStatus,
-          triageStatus: payload.triageStatus,
+          urgency: result.patient?.urgency || payload.urgency_level,
+          triageStatus: payload.urgency_level,
           vitals,
           triagedAt: result.record?.triagedAt || new Date().toISOString(),
         };
@@ -110,7 +113,7 @@ const NurseTriage = () => {
       });
     } catch (error) {
       console.error("Triage save failed", error);
-      alert(`Failed to save triage. Try again. ${error?.message || ''}`);
+      alert(`Failed to save triage. Try again. ${error?.message || ""}`);
     }
   };
 

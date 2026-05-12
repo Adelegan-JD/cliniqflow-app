@@ -28,33 +28,6 @@ export const NurseDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const defaultTriageQueue = [
-    {
-      patientId: "PT-002-TO",
-      name: "Tunde Okafor",
-      age: 41,
-      sex: "Male",
-      status: "awaiting_triage",
-      urgency: "urgent",
-    },
-    {
-      patientId: "PT-005-CE",
-      name: "Chioma Eze",
-      age: 22,
-      sex: "Female",
-      status: "awaiting_triage",
-      urgency: "routine",
-    },
-    {
-      patientId: "PT-007-MA",
-      name: "Maryam Abubakar",
-      age: 30,
-      sex: "Female",
-      status: "awaiting_triage",
-      urgency: "critical",
-    },
-  ];
-
   const handleCompleteTriage = (patientId) => {
     setTriageQueue((prevQueue) =>
       prevQueue.map((patient) =>
@@ -78,12 +51,22 @@ export const NurseDashboard = () => {
 
   const normalizeStats = (data = {}) => ({
     totalPatientsToday:
-      data.totalPatientsToday ?? data.totalPatients ?? data.patientsAvailable ?? 0,
+      data.totalPatientsToday ??
+      data.totalPatients ??
+      data.patientsAvailable ??
+      0,
     awaitingTriage:
-      data.awaitingTriage ?? data.patientsAwaitingTriage ?? data.triageQueue ?? 0,
+      data.awaitingTriage ??
+      data.patientsAwaitingTriage ??
+      data.triageQueue ??
+      0,
     awaitingConsultation:
-      data.awaitingConsultation ?? data.patientsAwaitingConsultation ?? data.consultationQueue ?? 0,
-    visitsEnded: data.visitsEnded ?? data.completedVisits ?? data.endedVisits ?? 0,
+      data.awaitingConsultation ??
+      data.patientsAwaitingConsultation ??
+      data.consultationQueue ??
+      0,
+    visitsEnded:
+      data.visitsEnded ?? data.completedVisits ?? data.endedVisits ?? 0,
   });
 
   useEffect(() => {
@@ -92,17 +75,6 @@ export const NurseDashboard = () => {
     const loadNurseStats = async () => {
       setLoading(true);
       setError("");
-
-      // default fallback shown in case API is unavailable
-      const fallbackStats = {
-        totalPatientsToday: 6,
-        awaitingTriage: 3,
-        awaitingConsultation: 2,
-        visitsEnded: 2,
-      };
-
-      setStats(fallbackStats);
-      setTriageQueue(defaultTriageQueue);
 
       try {
         if (import.meta.env.CLINIQ_AUTH_MODE === "supabase") {
@@ -118,9 +90,15 @@ export const NurseDashboard = () => {
 
           if (recordsError) throw recordsError;
 
-          const awaitingTriage = queueData.filter((p) => p.status === "awaiting_triage").length;
-          const triagedCount = queueData.filter((p) => p.status === "triaged").length;
-          const visitsEnded = recordsData.filter((r) => r.urgencyLevel === "normal").length;
+          const awaitingTriage = queueData.filter(
+            (p) => p.status === "awaiting_triage",
+          ).length;
+          const triagedCount = queueData.filter(
+            (p) => p.status === "triaged",
+          ).length;
+          const visitsEnded = recordsData.filter(
+            (r) => r.urgencyLevel === "normal",
+          ).length;
 
           if (!mounted) return;
           setStats({
@@ -130,35 +108,35 @@ export const NurseDashboard = () => {
             visitsEnded,
           });
           if (!mounted) return;
-          setTriageQueue(queueData || defaultTriageQueue);
+          setTriageQueue(Array.isArray(queueData) ? queueData : []);
           if (!mounted) return;
-          setTriageRecords(recordsData || []);
+          setTriageRecords(Array.isArray(recordsData) ? recordsData : []);
         } else {
           const data = await api.get("/nurse/stats");
           if (!mounted) return;
           setStats(normalizeStats(data));
-
-          try {
-            const queueData = await api.get("/nurse/triage-queue");
-            if (!mounted) return;
-            setTriageQueue(Array.isArray(queueData) ? queueData : defaultTriageQueue);
-
-            const recordsData = await api.get("/nurse/triage-records");
-            if (!mounted) return;
-            setTriageRecords(Array.isArray(recordsData) ? recordsData : []);
-          } catch (_) {
-            if (!mounted) return;
-            setTriageQueue(defaultTriageQueue);
-            setTriageRecords([]);
-          }
+          const [queueData, recordsData] = await Promise.all([
+            api.get("/nurse/triage-queue"),
+            api.get("/nurse/triage-records"),
+          ]);
+          if (!mounted) return;
+          setTriageQueue(Array.isArray(queueData) ? queueData : []);
+          if (!mounted) return;
+          setTriageRecords(Array.isArray(recordsData) ? recordsData : []);
         }
       } catch (error) {
         if (!mounted) return;
         console.error("Nurse stats fetch failed", error);
         if (!mounted) return;
-        setError("Nurse stats service is unavailable. Showing fallback values.");
-        setStats(fallbackStats);
-        setTriageQueue(defaultTriageQueue);
+        setError("Nurse dashboard data is unavailable right now.");
+        setStats({
+          totalPatientsToday: 0,
+          awaitingTriage: 0,
+          awaitingConsultation: 0,
+          visitsEnded: 0,
+        });
+        setTriageQueue([]);
+        setTriageRecords([]);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -196,7 +174,7 @@ export const NurseDashboard = () => {
           const data = await api.get("/nurse/stats");
           setStats(normalizeStats(data));
           const queueData = await api.get("/nurse/triage-queue");
-          setTriageQueue(Array.isArray(queueData) ? queueData : defaultTriageQueue);
+          setTriageQueue(Array.isArray(queueData) ? queueData : []);
         } catch (_) {
           // keep local changes if backend unavailable
         }
@@ -245,7 +223,8 @@ export const NurseDashboard = () => {
           Nurse Dashboard
         </h1>
         <p className="text-gray-500 mt-1">
-          Welcome {userProfile?.name || "Nurse"}, here is your current triage overview.
+          Welcome {userProfile?.name || "Nurse"}, here is your current triage
+          overview.
         </p>
       </header>
 
@@ -256,7 +235,9 @@ export const NurseDashboard = () => {
       ) : null}
 
       <section className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">Today's Overview</h2>
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">
+          Today's Overview
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {cards.map((card) => (
             <StatCard
@@ -274,12 +255,16 @@ export const NurseDashboard = () => {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-700">Triage Queue</h2>
           <span className="text-sm text-gray-500">
-            {triageQueue.filter((item) => item.status === "awaiting_triage").length} waiting
+            {
+              triageQueue.filter((item) => item.status === "awaiting_triage")
+                .length
+            }{" "}
+            waiting
           </span>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[720px]">
+          <table className="w-full text-left min-w-full">
             <thead className="bg-gray-50 text-gray-600 text-sm uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-3">Name</th>
@@ -293,7 +278,9 @@ export const NurseDashboard = () => {
             <tbody className="divide-y divide-gray-100">
               {triageQueue.map((patient) => (
                 <tr key={patient.patientId} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{patient.name}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    {patient.name}
+                  </td>
                   <td className="px-4 py-3 text-gray-700">{patient.age}</td>
                   <td className="px-4 py-3 text-gray-700">{patient.sex}</td>
                   <td className="px-4 py-3">
@@ -312,11 +299,13 @@ export const NurseDashboard = () => {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                      patient.status === "triaged"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-amber-100 text-amber-700"
-                    }`}>
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                        patient.status === "triaged"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
                       {patient.status.replace("_", " ")}
                     </span>
                   </td>
@@ -330,7 +319,9 @@ export const NurseDashboard = () => {
                       </button>
                     ) : (
                       <span className="px-3 py-1 rounded-md text-sm font-semibold bg-gray-100 text-gray-600">
-                        {patient.urgency ? patient.urgency.toUpperCase() : "TRIAGED"}
+                        {patient.urgency
+                          ? patient.urgency.toUpperCase()
+                          : "TRIAGED"}
                       </span>
                     )}
                   </td>
@@ -350,11 +341,15 @@ export const NurseDashboard = () => {
 
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-700">Triage Results</h2>
-          <span className="text-sm text-gray-500">{triageRecords.length} records</span>
+          <h2 className="text-lg font-semibold text-gray-700">
+            Triage Results
+          </h2>
+          <span className="text-sm text-gray-500">
+            {triageRecords.length} records
+          </span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[720px]">
+          <table className="w-full text-left min-w-full">
             <thead className="bg-gray-50 text-gray-600 text-sm uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-3">Patient</th>
@@ -367,19 +362,26 @@ export const NurseDashboard = () => {
               {triageRecords.length > 0 ? (
                 triageRecords.map((r) => (
                   <tr key={r.id || r.patientId} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-900 font-medium">{r.name || r.patientId}</td>
+                    <td className="px-4 py-3 text-gray-900 font-medium">
+                      {r.name || r.patientId}
+                    </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold uppercase ${
-                        r.urgencyLevel === "critical" || r.urgencyLevel === "emergency"
-                          ? "bg-red-100 text-red-700 border border-red-200"
-                          : r.urgencyLevel === "urgent"
-                          ? "bg-amber-100 text-amber-700 border border-amber-200"
-                          : "bg-green-100 text-green-700 border border-green-200"
-                      }`}>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-semibold uppercase ${
+                          r.urgencyLevel === "critical" ||
+                          r.urgencyLevel === "emergency"
+                            ? "bg-red-100 text-red-700 border border-red-200"
+                            : r.urgencyLevel === "urgent"
+                              ? "bg-amber-100 text-amber-700 border border-amber-200"
+                              : "bg-green-100 text-green-700 border border-green-200"
+                        }`}
+                      >
                         {r.urgencyLevel || "normal"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-700">{new Date(r.triagedAt).toLocaleString() || "—"}</td>
+                    <td className="px-4 py-3 text-gray-700">
+                      {new Date(r.triagedAt).toLocaleString() || "—"}
+                    </td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
                         Triaged
@@ -409,11 +411,14 @@ const StatCard = ({ title, count, icon, color }) => (
     />
     <div className="relative z-10 flex justify-between items-start">
       <div>
-        <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{title}</p>
+        <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+          {title}
+        </p>
         <h3 className="text-3xl font-bold text-gray-900 mt-2">{count}</h3>
       </div>
-      <div className={`p-3 rounded-lg text-white shadow-lg ${color}`}>{icon}</div>
+      <div className={`p-3 rounded-lg text-white shadow-lg ${color}`}>
+        {icon}
+      </div>
     </div>
   </div>
 );
-

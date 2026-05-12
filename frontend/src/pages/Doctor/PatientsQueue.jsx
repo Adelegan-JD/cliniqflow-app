@@ -36,7 +36,7 @@ const PatientsQueue = () => {
     const fetchQueue = async () => {
       try {
         setLoading(true);
-        const data = await api.get("/doctors-dashboard");
+        const data = await api.get("/doctor/triaged-queue");
         if (!cancelled) {
           setPatients(data?.queue || []);
           setError(null);
