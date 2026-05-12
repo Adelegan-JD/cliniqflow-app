@@ -18,7 +18,7 @@ def _normalize_nurse_queue_item(item: dict[str, Any]) -> dict[str, Any]:
         "age": item.get("age"),
         "sex": item.get("gender") or item.get("sex"),
         "gender": item.get("gender"),
-        "status": "awaiting_triage",
+        "status": item.get("status") or "awaiting_triage",
         "urgency": item.get("urgency") or "normal",
         "visit_status": item.get("visit_status"),
         "triage_status": item.get("triage_status"),
@@ -44,7 +44,7 @@ def nurse_stats(
 
 
 class TriageSubmitRequest(BaseModel):
-    visit_id: str
+    visit_id: str | None = None
     patient_id: str
     vitals: dict[str, Any] = Field(default_factory=dict)
     urgency_level: str | None = Field(
@@ -66,8 +66,24 @@ def _submit_triage(
     body: TriageSubmitRequest, staff_id: str | None
 ) -> dict[str, Any]:
     try:
+        visit_id = body.visit_id
+        # If frontend did not provide a visit id (new registration), create a visit
+        if not visit_id:
+            # create_visit expects patient_id and returns a visit row
+            created = store.create_visit(
+                patient_id=body.patient_id,
+                reason_for_visit=None,
+                department=None,
+                checked_in_by=staff_id,
+            )
+            if not created:
+                raise ValueError("Failed to create visit for patient")
+            visit_id = created.get("visit_id") or created.get("visit_uuid") or created.get("visit_id")
+
+        # ensure visit_id is a string for downstream save_triage
+        visit_id = str(visit_id)
         ev = store.save_triage(
-            visit_id=body.visit_id,
+            visit_id=visit_id,
             patient_id=body.patient_id,
             vitals=body.vitals,
             urgency=body.urgency_level,

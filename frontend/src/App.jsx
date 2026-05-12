@@ -30,11 +30,12 @@ import { Help } from "./pages/Admin/Help";
 import NurseLayout from "./components/Layouts/NurseLayout";
 import { NurseDashboard } from "./pages/Nurse/NurseDashboard";
 import NurseTriage from "./pages/Nurse/NurseTriage";
+import TriageQueue from "./pages/Nurse/TriageQueue";
 import { NurseHelp } from "./pages/Nurse/Help";
+import RecordOfficerRecords from "./pages/RecordOfficers/Records";
 import RecordOfficerLayout from "./components/Layouts/RecordOfficerLayout";
 import RecordOfficerHelp from "./pages/RecordOfficers/RecordOfficerHelp";
 import RecordOfficerDashboard from "./pages/RecordOfficers/Dashboard";
-import RecordOfficerRecords from "./pages/RecordOfficers/Records";
 
 // Role-based redirect mapping
 const getRoleBasedRoute = (role) => {
@@ -207,6 +208,8 @@ function App() {
               }
             >
               <Route index element={<NurseDashboard />} />
+              <Route path="triage-queue" element={<TriageQueue />} />
+              <Route path="records" element={<RecordOfficerRecords />} />
               <Route path="triage/:patientId" element={<NurseTriage />} />
               <Route path="help" element={<NurseHelp />} />
             </Route>
@@ -236,6 +239,7 @@ function App() {
               }
             >
               <Route index element={<DoctorsDashboard />} />
+              <Route path="records" element={<RecordOfficerRecords />} />
               <Route
                 path="/doctors-dashboard/patients_queue"
                 element={<PatientsQueue />}
