@@ -1,26 +1,34 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ClipboardList, FileText, Stethoscope, AlertCircle, Loader2 } from "lucide-react";
+import {
+  ClipboardList,
+  FileText,
+  Stethoscope,
+  AlertCircle,
+  Loader2,
+  Search,
+  Filter,
+  Users,
+  Clock,
+} from "lucide-react";
 import { api } from "../../utils/api";
 
-const statusPriority = {
-  awaiting_consultation: 1,
-  awaiting_triage: 2,
-  visit_ended: 3,
-};
-
-const statusMeta = {
-  awaiting_consultation: {
+const STATUS_META = {
+  WITH_DOCTOR: {
+    label: "Consultation",
+    badge: "badge-success",
+  },
+  WAITING_FOR_DOCTOR: {
     label: "Ready for Consultation",
-    badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    badge: "badge-warning",
   },
-  awaiting_triage: {
-    label: "Awaiting Triage",
-    badge: "bg-amber-100 text-amber-700 border-amber-200",
+  COMPLETED: {
+    label: "Completed",
+    badge: "badge-primary",
   },
-  visit_ended: {
-    label: "Visit Ended",
-    badge: "bg-gray-100 text-gray-700 border-gray-200",
+  CANCELLED: {
+    label: "Cancelled",
+    badge: "badge-danger",
   },
 };
 
@@ -29,6 +37,8 @@ const PatientsQueue = () => {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -36,9 +46,9 @@ const PatientsQueue = () => {
     const fetchQueue = async () => {
       try {
         setLoading(true);
-        const data = await api.get("/doctors-dashboard");
+        const data = await api.get("/doctor/queue");
         if (!cancelled) {
-          setPatients(data?.queue || []);
+          setPatients(Array.isArray(data) ? data : []);
           setError(null);
         }
       } catch (err) {
@@ -52,123 +62,252 @@ const PatientsQueue = () => {
     };
 
     fetchQueue();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const sortedPatients = useMemo(() => {
-    return [...patients].sort(
-      (a, b) => (statusPriority[a.status] || 999) - (statusPriority[b.status] || 999)
-    );
-  }, [patients]);
+  const filteredPatients = useMemo(() => {
+    return [...patients].filter((patient) => {
+      const query = searchTerm.toLowerCase();
+      const name = (patient.patient_name || patient.name || "").toLowerCase();
+      const pid = (patient.patient_id || patient.patientId || "").toLowerCase();
+      const vid = (patient.visit_id || patient.sessionId || "").toLowerCase();
+      const status = (
+        patient.visit_status ||
+        patient.status ||
+        ""
+      ).toUpperCase();
 
-  // Loading State
-  if (loading) {
-    return (
-      <div className="flex flex-col flex-1 p-8 items-center justify-center">
-        <Loader2 className="text-blue-600 animate-spin mb-2" size={32} />
-        <p className="text-gray-500 font-medium">Loading patient queue...</p>
-      </div>
-    );
-  }
+      const matchesSearch =
+        name.includes(query) || pid.includes(query) || vid.includes(query);
+      const matchesStatus =
+        statusFilter === "all" || status === statusFilter.toUpperCase();
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [patients, searchTerm, statusFilter]);
+
+  const stats = useMemo(
+    () => ({
+      total: patients.length,
+      ready: patients.filter(
+        (p) => (p.visit_status || p.status) === "WAITING_FOR_DOCTOR",
+      ).length,
+      active: patients.filter(
+        (p) => (p.visit_status || p.status) === "WITH_DOCTOR",
+      ).length,
+      completed: patients.filter(
+        (p) => (p.visit_status || p.status) === "COMPLETED",
+      ).length,
+    }),
+    [patients],
+  );
+
+  const handleStartConsultation = async (patient) => {
+    const patientId = patient.patient_id || patient.patientId;
+    const visitId = patient.visit_id || patient.sessionId;
+    if (!patientId || !visitId) return;
+
+    try {
+      await api.post(
+        `/doctor/start-exam?visit_id=${encodeURIComponent(visitId)}`,
+      );
+    } catch (_) {
+      // Non-blocking: allow navigation if the exam is already active.
+    }
+
+    navigate(`/doctors-dashboard/recording-session/${patientId}/${visitId}`, {
+      state: { patient },
+    });
+  };
 
   return (
-    <div className="flex flex-col flex-1 p-4 md:p-6 overflow-auto bg-gray-50/50">
-      {/* Header Section */}
-      <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-2">
-          <ClipboardList className="text-blue-600" size={28} />
-          Patient Queue
-        </h1>
-        <p className="text-gray-600 mt-1">
-          Patients are automatically prioritized by care readiness.
-        </p>
-      </div>
-
-      {/* Error Alert */}
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-          <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={20} />
+    <div className="transition-all duration-300 p-4 md:p-6 overflow-auto w-full bg-gray-50/50">
+      <header className="mb-8">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-blue-50 rounded-xl">
+            <ClipboardList className="text-blue-600" size={32} />
+          </div>
           <div>
-            <p className="font-semibold text-red-900">Error loading queue</p>
-            <p className="text-red-700 text-sm">{error}</p>
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
+              Patient Queue
+            </h1>
+            <p className="text-gray-600 mt-1">
+              Here's a list of patients that are ready for consultation
+            </p>
           </div>
         </div>
-      )}
+      </header>
 
-      {/* Queue Table Card */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-6 border-b border-gray-200 flex flex-wrap items-center gap-3">
-          <h2 className="text-xl font-semibold flex items-center gap-2 mr-auto text-gray-800">
-            <Stethoscope size={20} className="text-blue-500" />
-            Queue Overview
-          </h2>
-          <span className="text-sm font-medium text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
-            {sortedPatients.length} Patients Total
-          </span>
-        </div>
-
-        {sortedPatients.length === 0 && !error ? (
-          <div className="p-12 text-center text-gray-500">
-            <p className="font-medium text-lg text-gray-600">Queue is empty</p>
-            <p className="text-sm mt-1">No patients are currently awaiting care.</p>
+      {error ? (
+        <div className="alert alert-warning mb-6">
+          <AlertCircle size={20} className="shrink-0" />
+          <div>
+            <p className="font-semibold">Error</p>
+            <p className="text-sm">{error}</p>
           </div>
-        ) : (
+        </div>
+      ) : null}
+
+      <section className="mb-8">
+        <div className="grid-responsive">
+          <div className="stat-card">
+            <div className="flex items-center gap-3">
+              <div className="stat-card-icon">
+                <Users size={20} />
+              </div>
+              <div>
+                <p className="stat-card-label">Total in Queue</p>
+                <p className="stat-card-value">{stats.total}</p>
+              </div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="flex items-center gap-3">
+              <div className="stat-card-icon bg-amber-100 text-amber-600">
+                <Clock size={20} />
+              </div>
+              <div>
+                <p className="stat-card-label">Ready</p>
+                <p className="stat-card-value text-amber-600">{stats.ready}</p>
+              </div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="flex items-center gap-3">
+              <div className="stat-card-icon bg-emerald-100 text-emerald-600">
+                <Stethoscope size={20} />
+              </div>
+              <div>
+                <p className="stat-card-label">In Progress</p>
+                <p className="stat-card-value text-emerald-600">
+                  {stats.active}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="flex items-center gap-3">
+              <div className="stat-card-icon bg-slate-100 text-slate-600">
+                <FileText size={20} />
+              </div>
+              <div>
+                <p className="stat-card-label">Completed</p>
+                <p className="stat-card-value text-slate-600">
+                  {stats.completed}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="card elevated p-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <Search size={16} className="inline mr-2" />
+              Search by name or ID
+            </label>
+            <input
+              type="text"
+              placeholder="Enter patient name, patient ID, or visit ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="input-field w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <Filter size={16} className="inline mr-2" />
+              Filter by status
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="input-field w-full"
+            >
+              <option value="all">All statuses</option>
+              <option value="WAITING_FOR_DOCTOR">Ready for consultation</option>
+              <option value="WITH_DOCTOR">In consultation</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section className="card elevated">
+        {loading ? (
+          <div className="flex items-center justify-center p-12">
+            <Loader2 size={32} className="animate-spin text-blue-600" />
+            <span className="ml-3 text-gray-600 font-medium">
+              Loading patient queue...
+            </span>
+          </div>
+        ) : filteredPatients.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[900px]">
-              <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider font-semibold">
+            <table className="table-modern">
+              <thead>
                 <tr>
-                  <th className="px-6 py-4">Name</th>
-                  <th className="px-6 py-4">Patient ID</th>
-                  <th className="px-6 py-4">Session ID</th>
-                  <th className="px-6 py-4">Age/Sex</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Records</th>
-                  <th className="px-6 py-4 text-right">Action</th>
+                  <th>Patient Name</th>
+                  <th>Patient ID</th>
+                  <th>Visit ID</th>
+                  <th>Age / Gender</th>
+                  <th>Status</th>
+                  <th>Registered</th>
+                  <th className="text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {sortedPatients.map((patient) => {
-                  const patientKey = patient.sessionId || patient.patientId || Math.random();
-                  const meta = statusMeta[patient.status] || { label: "Unknown", badge: "bg-gray-100" };
-                  
+              <tbody>
+                {filteredPatients.map((patient, index) => {
+                  const visitStatus =
+                    patient.visit_status ||
+                    patient.status ||
+                    "WAITING_FOR_DOCTOR";
+                  const meta =
+                    STATUS_META[visitStatus] || STATUS_META.WAITING_FOR_DOCTOR;
+                  const patientId =
+                    patient.patient_id || patient.patientId || "—";
+                  const visitId = patient.visit_id || patient.sessionId || "—";
+
                   return (
-                    <tr key={patientKey} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-gray-900">
-                        {patient.name || "Unknown Patient"}
+                    <tr key={`${patientId}-${visitId}-${index}`}>
+                      <td className="font-semibold text-gray-900">
+                        {patient.patient_name ||
+                          patient.name ||
+                          "Unknown Patient"}
                       </td>
-                      <td className="px-6 py-4 text-gray-500 font-mono text-xs uppercase">
-                        {patient.patientId || patient.pid}
+                      <td className="font-mono text-xs text-gray-700">
+                        {patientId}
                       </td>
-                      <td className="px-6 py-4 text-gray-500 font-mono text-xs uppercase">
-                        {patient.sessionId || "N/A"}
+                      <td className="font-mono text-xs text-gray-700">
+                        {visitId}
                       </td>
-                      <td className="px-6 py-4 text-gray-700 text-sm">
-                        {patient.age}y / {patient.sex}
+                      <td className="text-gray-700">
+                        {patient.age || "—"} /{" "}
+                        {patient.gender || patient.sex || "—"}
                       </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold border ${meta.badge}`}>
+                      <td>
+                        <span className={`badge ${meta.badge}`}>
                           {meta.label}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <button className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold text-sm transition-colors">
-                          <FileText size={14} />
-                          View History
-                        </button>
+                      <td className="text-gray-600 text-sm">
+                        {patient.created_at
+                          ? new Date(patient.created_at).toLocaleString()
+                          : "—"}
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        {patient.status === "awaiting_consultation" ? (
-                          <button
-                            onClick={() => navigate(`/doctors-dashboard/recording-session/${patient.patientId}/${patient.sessionId}`, { state: { patient } })}
-                            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 shadow-sm active:scale-95 transition-all"
-                          >
-                            Start Consultation
-                          </button>
-                        ) : (
-                          <span className="text-sm text-gray-400 italic">
-                            {patient.status === "visit_ended" ? "Complete" : "Wait for Triage"}
-                          </span>
-                        )}
+                      <td className="text-right">
+                        <button
+                          onClick={() => handleStartConsultation(patient)}
+                          className="btn btn-primary btn-small"
+                        >
+                          {visitStatus === "WITH_DOCTOR"
+                            ? "Continue Consultation"
+                            : "Start Consultation"}
+                        </button>
                       </td>
                     </tr>
                   );
@@ -176,8 +315,19 @@ const PatientsQueue = () => {
               </tbody>
             </table>
           </div>
+        ) : (
+          <div className="p-12 text-center text-gray-500">
+            <p className="font-medium text-lg text-gray-600">
+              No patients found
+            </p>
+            <p className="text-sm mt-1">
+              {searchTerm || statusFilter !== "all"
+                ? "Try adjusting your filters."
+                : "No patients are currently waiting for consultation."}
+            </p>
+          </div>
         )}
-      </div>
+      </section>
     </div>
   );
 };

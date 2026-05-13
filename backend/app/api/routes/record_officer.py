@@ -54,10 +54,17 @@ def search_patients(
 
 
 @router.get("/records", response_model=list[dict[str, Any]])
-def today_records(
-    _user: Annotated[CurrentUser, Depends(require_roles(ROLE_RECORD_OFFICER, ROLE_ADMIN))],
+def records(
+    _user: Annotated[
+        CurrentUser,
+        Depends(require_roles(ROLE_RECORD_OFFICER, ROLE_DOCTOR, ROLE_NURSE, ROLE_ADMIN)),
+    ],
+    date: str | None = Query(None, description="YYYY-MM-DD; if omitted, returns today's records"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(500, ge=1, le=2000),
 ) -> list[dict[str, Any]]:
-    return store.list_record_officer_today_records()
+    rows = store.list_record_officer_records(on_date=date, skip=skip, limit=limit)
+    return rows
 
 
 @router.post("/register-patient")
@@ -66,7 +73,10 @@ def register_patient(
     _user: Annotated[CurrentUser, Depends(require_roles(ROLE_RECORD_OFFICER))],
 ) -> dict[str, Any]:
     data = body.model_dump()
-    row = store.register_patient(data, registered_by=_user.staff_id)
+    try:
+        row = store.register_patient(data, registered_by=_user.staff_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return {"pid": row["pid"], "id": row["id"], **row}
 
 

@@ -18,6 +18,7 @@ import Layout from "./components/Layouts/AdminLayout";
 import DoctorsLayout from "./components/Layouts/DoctorsLayout";
 import DoctorsDashboard from "./pages/Doctor/DoctorsDashboard";
 import PatientsQueue from "./pages/Doctor/PatientsQueue";
+import NurseQueueAwareness from "./pages/Doctor/NurseQueueAwareness";
 import RecordingSession from "./pages/Doctor/RecordingSession";
 import Soap from "./pages/Doctor/Soap";
 import Home from "./pages/Home";
@@ -30,11 +31,13 @@ import { Help } from "./pages/Admin/Help";
 import NurseLayout from "./components/Layouts/NurseLayout";
 import { NurseDashboard } from "./pages/Nurse/NurseDashboard";
 import NurseTriage from "./pages/Nurse/NurseTriage";
+import TriageQueue from "./pages/Nurse/TriageQueue";
+import TriageRecords from "./pages/Nurse/TriageRecords";
 import { NurseHelp } from "./pages/Nurse/Help";
+import RecordOfficerRecords from "./pages/RecordOfficers/Records";
 import RecordOfficerLayout from "./components/Layouts/RecordOfficerLayout";
 import RecordOfficerHelp from "./pages/RecordOfficers/RecordOfficerHelp";
 import RecordOfficerDashboard from "./pages/RecordOfficers/Dashboard";
-import RecordOfficerRecords from "./pages/RecordOfficers/Records";
 
 // Role-based redirect mapping
 const getRoleBasedRoute = (role) => {
@@ -207,6 +210,9 @@ function App() {
               }
             >
               <Route index element={<NurseDashboard />} />
+              <Route path="triage-queue" element={<TriageQueue />} />
+              <Route path="triage-results" element={<TriageRecords />} />
+              <Route path="records" element={<RecordOfficerRecords />} />
               <Route path="triage/:patientId" element={<NurseTriage />} />
               <Route path="help" element={<NurseHelp />} />
             </Route>
@@ -236,18 +242,15 @@ function App() {
               }
             >
               <Route index element={<DoctorsDashboard />} />
+              <Route path="records" element={<RecordOfficerRecords />} />
+              <Route path="patients_queue" element={<PatientsQueue />} />
+              <Route path="nurse-queue" element={<NurseQueueAwareness />} />
+              {/* Nurse triage results view removed for doctors */}
               <Route
-                path="/doctors-dashboard/patients_queue"
-                element={<PatientsQueue />}
-              />
-              <Route
-                path="/doctors-dashboard/recording-session/:patientId/:sessionId"
+                path="recording-session/:patientId/:sessionId"
                 element={<RecordingSession />}
               />
-              <Route
-                path="/doctors-dashboard/soap/:patientId/:sessionId"
-                element={<Soap />}
-              />
+              <Route path="soap/:patientId/:sessionId" element={<Soap />} />
               <Route
                 path="*"
                 element={<Navigate to="/doctors-dashboard" replace />}
