@@ -1,300 +1,192 @@
+# CliniqFlow AI Engine
 
-# CliniqFlow - Healthcare AI Assistant for Modern Medical Practice
+CliniqFlow AI Engine is the standalone FastAPI service that powers clinical NLP, speech-to-text (ASR), and medication guidance for the CliniqFlow platform. It is designed to be called by the backend API (or trusted clients) and exposes a focused set of endpoints for triage support, transcript structuring, and dose validation.
 
-## What is This Project?
+This service is a decision-support tool. It organizes and flags clinical information, but does not diagnose.
 
-CliniqFlow is an intelligent software system that helps healthcare professionals (doctors, nurses, and medical practitioners) organize and analyze patient information quickly and accurately. It takes unstructured patient notes from consultations and transforms them into organized, actionable medical data that follows international healthcare standards.
+## What it does
 
-**Main Purpose:** Improve healthcare delivery by automating the organization of patient information, enabling better decision-making, faster documentation, and improved patient care across all age groups and demographics.
+- NLP for clinical structuring
+  - Vitals-based urgency scoring for nurse triage
+  - Transcript-to-structured data and SOAP note generation
+  - Nurse-to-doctor handoff that merges vitals with narrative
+- ASR (Automatic Speech Recognition)
+  - Whisper-based transcription
+  - Speaker diarization using pyannote
+- RAG medication guidance
+  - Retrieve evidence from curated medication documents
+  - Deterministic dose validation with safety checks
 
-**Technology Used:**
-- **FastAPI:** A modern web framework for building high-performance APIs
-- **Python 3.8+:** The programming language that powers the application
-- **OpenAI API:** Optional AI integration for advanced language understanding
-- **Pydantic:** Data validation and type checking framework
+## NLP pipeline and outputs
 
----
+- Extraction methods
+  - Rule-based extraction for speed and deterministic behavior
+  - Optional LLM extraction when `OPENAI_API_KEY` is set
+  - Hybrid merge with confidence-aware fallback to rule-based results
+- Structured outputs
+  - Demographics include height and auto-calculated BMI
+  - Symptoms include onset, location, and modifiers when present
+  - Vitals include unit, normal range, and abnormality flags
+  - Medical history includes family history when available
+  - Clinical flags highlight urgent findings
+- Quality and confidence signals
+  - `overall_confidence` and `confidence_level` (high, medium, low)
+  - `missing_fields` for incomplete assessments
+  - `extraction_warnings` for suspicious or low-quality inputs
 
-## What Does It Do?
+Confidence weighting used for NLP scoring:
 
-### For Nurses & Triage Personnel: Rapid Patient Assessment
-- Enter a patient's vital signs (temperature, heart rate, breathing rate, blood pressure, oxygen level, etc.)
-- Get an immediate triage recommendation:
-  - 🟢 **Green (Normal):** Patient is stable, routine care appropriate
-  - 🟡 **Yellow (Urgent):** Patient needs attention soon, but not immediately critical
-  - 🔴 **Red (Emergency):** Patient needs immediate medical attention
-
-### For Doctors & Medical Practitioners: Comprehensive Patient Documentation
-- Input a patient consultation (conversation, notes, observations)
-- System automatically:
-  - Extracts all mentioned symptoms with severity and onset information
-  - Identifies relevant medical history and family history
-  - Organizes vital signs and measurements
-  - Flags concerning clinical findings that may need immediate attention
-  - Generates a complete SOAP note (Subjective, Objective, Assessment, Plan) in standard medical format
-  - Provides confidence scores indicating how reliable each extracted piece of information is
-
----
-
-## How to Get Started
-
-### Prerequisites
-You need Python 3.8 or higher installed. If you don't have it, download it from [python.org](https://www.python.org/downloads/).
-
-### Step 1: Get the Project Files
-Clone or download this repository to your local machine:
-```bash
-git clone <repository-url>
-cd kenny_code_only
+```
+symptoms:     0.40
+vitals:       0.30
+demographics: 0.15
+history:      0.15
 ```
 
-### Step 2: Create a Virtual Environment
-A virtual environment isolates this project's dependencies from other Python projects on your computer.
+## API overview
 
-**For Windows (PowerShell):**
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+
+NLP
+- POST /nlp/vitals-urgency
+- POST /nlp/nurse-to-doctor
+- POST /nlp/process
+- GET  /nlp/health
+
+ASR (requires Bearer token)
+- GET  /asr/health
+- POST /asr/transcribe
+
+RAG
+- POST /rag/retrieve
+- POST /rag/validate-dose
+
+
+## Authentication
+
+ASR endpoints require a Bearer token. The token value comes from the `openai_key` environment variable.
+
+Example header:
+
 ```
-
-**For Windows (Command Prompt):**
-```cmd
-python -m venv venv
-venv\Scripts\activate.bat
+Authorization: Bearer <openai_key>
 ```
+NLP and RAG endpoints currently do not require a token in this service.
 
-**For macOS/Linux:**
-```bash
-python -m venv venv
-source venv/bin/activate
-```
+## Environment variables
 
-### Step 3: Install Dependencies
-```bash
-pip install -r requirements.txt
-```
+- openai_key: API key used to authorize ASR requests (required for ASR)
+- OPENAI_API_KEY: optional key for LLM-based symptom extraction
+- HF_TOKEN: Hugging Face token required for pyannote diarization models
 
-### Step 4: Set Up Environment Variables (Optional but Recommended)
-Create a `.env` file in the project root directory:
-```
-OPENAI_API_KEY=your-openai-api-key-here
-```
 
-To get an OpenAI API key:
-- Visit [openai.com](https://openai.com)
-- Create an account or sign in
-- Go to API settings and create a new API key
-- Copy the key into your `.env` file
+## Example requests
 
-**Note:** The system can work with basic extraction without an API key, but AI-powered analysis requires this key.
+Vitals urgency:
 
-### Step 5: Run the Application
-```bash
-cd app/nlp/api
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Step 6: Access the Interface
-Open your browser and go to: **http://127.0.0.1:8000/docs**
-
-You'll see an interactive API documentation interface (Swagger UI) where you can test all available endpoints.
-
----
-
-## How to Use CliniqFlow
-
-### Scenario 1: Triage Personnel Rapid Assessment
-A patient arrives at the clinic. The triage nurse quickly measures vital signs and enters them:
-
-**Endpoint:** `/nlp/vitals-urgency`
-
-**Example Request:**
 ```json
+POST /nlp/vitals-urgency
 {
-  "patient_age": "45 years",
+  "patient_age": "35 years",
   "patient_sex": "female",
-  "temperature": 38.9,
-  "heart_rate": 115,
-  "respiratory_rate": 24,
-  "oxygen_saturation": 92,
-  "blood_pressure_systolic": 145,
-  "blood_pressure_diastolic": 92,
-  "weight_kg": 68,
+  "temperature": 39.2,
+  "heart_rate": 128,
+  "respiratory_rate": 26,
+  "oxygen_saturation": 93,
+  "weight_kg": 70,
   "height_cm": 165
 }
 ```
 
-**System Response:** Urgency level (Green/Yellow/Red) with clinical reasoning
+Example response (trimmed):
 
----
-
-### Scenario 2: Doctor's Comprehensive Patient Processing
-A doctor completes a patient consultation and needs documentation:
-
-**Endpoint:** `/nlp/process`
-
-**Example Request:**
 ```json
 {
-  "transcript": "Patient reports 3 days of fever, persistent cough, and difficulty breathing. Temperature was 39°C this morning. No known allergies. Family history of hypertension.",
-  "patient_age": "52 years",
+  "session_id": "vitals-1715510000000",
+  "urgency_level": "emergency",
+  "urgency_score": 78,
+  "urgency_reasons": ["Fever", "Tachycardia", "Hypoxia"],
+  "abnormal_vitals": ["temperature", "heart_rate", "oxygen_saturation"],
+  "bmi": 25.71,
+  "bmi_category": "Overweight"
+}
+```
+
+Transcript processing:
+
+```json
+POST /nlp/process
+{
+  "transcript": "Patient reports 3 days of fever and cough...",
+  "patient_age": "42 years",
   "patient_sex": "male",
   "session_id": "session_123"
 }
 ```
 
-**System Response:** 
-- Extracted symptoms with severity ratings
-- Identified vital signs
-- Medical history summary
-- Complete SOAP note
-- Clinical flags (if any concerning findings)
-- Confidence scores for each extracted element
+Example response (trimmed):
 
----
+```json
+{
+  "session_id": "session_123",
+  "structured_data": {
+    "overall_confidence": 0.85,
+    "confidence_level": "high",
+    "missing_fields": ["oxygen_saturation"],
+    "extraction_warnings": []
+  },
+  "soap_note": {
+    "subjective": "...",
+    "objective": "...",
+    "assessment": "...",
+    "plan": "..."
+  }
+}
+```
 
-## Project Architecture Overview
+
+## Folder structure
 
 ```
-kenny_code_only/
+ai_engine/
 ├── app/
-│   └── nlp/
-│       ├── api/
-│       │   ├── main.py              # Application entry point
-│       │   └── nlp_routes.py        # API endpoints
-│       ├── models/
-│       │   └── clinical_schema.py   # Data structure definitions
-│       └── src/
-│           ├── symptom_extractor.py      # Text analysis engine
-│           ├── soap_formatter.py         # Medical note generator
-│           ├── urgency_scorer.py         # Triage calculator
-│           ├── confidence_calculator.py  # Data reliability scorer
-│           └── validators.py            # Data quality checks
-├── requirements.txt                 # Python dependencies
-└── README.md                        # This file
+│   ├── api/
+│   │   ├── asr_api.py            # ASR endpoints
+│   │   └── rag_api.py            # RAG endpoints
+│   ├── asr/                      # Whisper + diarization
+│   ├── nlp/
+│   │   ├── api/                  # NLP endpoints
+│   │   ├── models/               # Pydantic clinical schemas
+│   │   └── src/                  # Extractors, scorers, formatters
+│   └── Rag/
+│       ├── files/                # Medication knowledge sources
+│       └── ...
+├── main.py                       # FastAPI app + model boot
+├── requirements.txt
+└── README.md
 ```
 
----
+## Run locally (Windows PowerShell)
 
-## Core Features Explained
-
-### 1. **Intelligent Text Processing**
-The system analyzes patient consultation text using two approaches:
-- **Rule-Based:** Looks for known medical keywords and patterns (fast, reliable)
-- **AI-Powered:** Uses OpenAI's language models for contextual understanding (more accurate for complex cases)
-- **Hybrid:** Combines both methods for optimal results
-
-### 2. **Triage & Urgency Assessment**
-Evaluates vital signs against age-appropriate normal ranges and provides:
-- Color-coded urgency levels for quick decision-making
-- Specific reasons for urgency classification
-- Support for patients of all ages (pediatric through geriatric)
-
-### 3. **Structured Medical Documentation**
-Automatically generates SOAP notes following international medical standards:
-- **S (Subjective):** What the patient reports
-- **O (Objective):** Measured vital signs and physical findings
-- **A (Assessment):** Clinical interpretation
-- **P (Plan):** Recommended next steps
-
-### 4. **Confidence Scoring**
-Each extracted piece of information receives a confidence score (0-100%), indicating how reliable the data is
-
-### 5. **Safety & Quality Checks**
-- Identifies missing critical information
-- Flags abnormal vital signs
-- Detects potential data quality issues
-- Never Auto-diagnoses (system provides data, not medical decisions)
-
----
-
-## Running Tests
-
-To verify the installation and run tests:
-```bash
-pytest tests/ -v
+```
+cd ai_engine
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8001
 ```
 
-Tests are located in the `tests/` directory and cover all major modules.
+Notes:
+- First run may download Whisper and pyannote models.
+- GPU is used automatically if available; otherwise CPU is used.
 
----
+## Testing
 
-## Development Guidelines
-
-### Code Quality
-- Use **black** for code formatting consistency
-- Use **ruff** for linting
-- Follow PEP 8 guidelines
-- Add type hints to all functions
-- Include docstrings for modules, classes, and functions
-
-### Adding New Features
-1. Create a new branch: `git checkout -b feature/your-feature-name`
-2. Write tests first (TDD approach recommended)
-3. Implement the feature
-4. Ensure all tests pass
-5. Submit a pull request
-
-### Updating Dependencies
-- Update `requirements.txt` when adding new packages
-- Test thoroughly before committing
-- Document any breaking changes
-
----
-
-## Who Can Use CliniqFlow?
-
-**Healthcare Professionals** including:
-- **Nurses & Triage Personnel** - For rapid patient assessment and triage decisions
-- **Doctors & Physicians** - For structured documentation and clinical decision support
-- **Healthcare Administrators** - For improved record-keeping and operational efficiency
-- **Medical Students & Residents** - For learning proper medical documentation
-
-**Applicable Settings:**
-- Primary care clinics
-- Hospital emergency departments
-- Urgent care centers
-- Telemedicine platforms
-- Healthcare training institutions
-
-**Patient Demographics:**
-- All ages (pediatric, adult, geriatric)
-- All geographic regions
-- Multiple languages and contexts (system is extensible)
-
----
-
-## Limitations & Important Notes
-
-**This is a Decision Support Tool, Not a Diagnostic Tool**
-- CliniqFlow helps organize information, not diagnose conditions
-- Final medical decisions rest with qualified healthcare professionals
-- System confidence scores indicate data reliability, not medical certainty
-- Always use clinical judgment in conjunction with this tool
-
----
+```
+pytest
+```
 
 ## Troubleshooting
 
-### Issue: "ModuleNotFoundError: No module named 'openai'"
-**Solution:** Run `pip install -r requirements.txt` to install all dependencies
-
-### Issue: Fast API won't start
-**Solution:** 
-- Ensure you're in the correct directory: `app/nlp/api`
-- Check port 8000 isn't already in use: Change to `--port 8001` if needed
-- Verify Python environment is activated
-
-### Issue: API works but returns errors for every query
-**Solution:**
-- Check if `.env` file has a valid OpenAI API key (if using AI features)
-- Try with just rule-based extraction (doesn't require API key)
-
-### Issue: Unusual results from symptom extraction
-**Solution:**
-- Check confidence scores (may be low for unclear input)
-- Try reformatting patient transcript with clearer language
-- Review extraction warnings in the response
-
----
-
+- If ASR requests return 401, confirm `openai_key` is set and the Bearer token matches.
+- If diarization fails, verify `HF_TOKEN` is set and has access to required models.
+- If LLM extraction is disabled, set `OPENAI_API_KEY` (rule-based extraction still works).
