@@ -131,7 +131,14 @@ class MemoryStore:
         p = self.get_patient(patient_id)
         if not p:
             return None
+        
+        # Check if patient already has an active visit
         with self._lock:
+            for visit in self.visits.values():
+                if (visit.get("patient_id") == patient_id and 
+                    visit.get("visit_status") in [WAITING_FOR_TRIAGE, "ACTIVE", "ongoing"]):
+                    return None  # Patient already has an active visit
+            
             vid = self.next_visit_id()
             now = _utcnow()
             row = {
@@ -446,6 +453,12 @@ class MemoryStore:
             for v in self.visits.values()
             if normalize_visit_status(v.get("visit_status")) == WAITING_FOR_TRIAGE
         ]
+        completed_today = [
+            v
+            for v in self.visits.values()
+            if normalize_visit_status(v.get("visit_status")) == COMPLETED
+            and (v.get("created_at") or "").startswith(today)
+        ]
         recent_visits = sorted(
             self.visits.values(),
             key=lambda x: x.get("created_at") or "",
@@ -461,6 +474,10 @@ class MemoryStore:
                 "visitsToday": len(visits_today),
                 "waitingForTriage": len(waiting),
                 "newRegistrationsToday": len(regs_today),
+                "totalPatientsToday": len(regs_today),
+                "activeQueueCount": len(waiting),
+                "visitsCreatedToday": len(visits_today),
+                "completedVisitsToday": len(completed_today),
             },
             "queue": [
                 {

@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import (
     admin,
+    consultation,
     doctor,
     health,
     nurse,
@@ -38,6 +39,7 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(admin.router)
+app.include_router(consultation.router)
 app.include_router(doctor.router)
 app.include_router(record_officer.router)
 app.include_router(nurse.router)
