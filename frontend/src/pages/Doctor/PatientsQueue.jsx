@@ -113,8 +113,14 @@ const PatientsQueue = () => {
       await api.post(
         `/doctor/start-exam?visit_id=${encodeURIComponent(visitId)}`,
       );
-    } catch (_) {
-      // Non-blocking: allow navigation if the exam is already active.
+    } catch (err) {
+      const msg = (err?.message || "").toLowerCase();
+      const alreadyActive =
+        msg.includes("not waiting") || msg.includes("not found or not waiting");
+      if (!alreadyActive) {
+        // Non-blocking but visible for unexpected errors
+        console.warn("Unable to mark visit as started", err?.message || err);
+      }
     }
 
     navigate(`/doctors-dashboard/recording-session/${patientId}/${visitId}`, {

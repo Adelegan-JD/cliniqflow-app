@@ -399,6 +399,22 @@ class DbStore:
             pid, _ = _resolve_patient_pid(conn, patient_id)
             if not pid:
                 return None
+            
+            # Check if patient already has an active visit
+            active_visit = conn.execute(
+                text(
+                    """
+                    SELECT id FROM visitations 
+                    WHERE patient_id = :pid AND status IN ('active', 'waiting', 'ongoing')
+                    LIMIT 1;
+                    """
+                ),
+                {"pid": pid},
+            ).scalar()
+            
+            if active_visit:
+                return None  # Patient already has an active visit
+            
             vn = _visit_number()
             for _ in range(50):
                 try:
@@ -1218,6 +1234,15 @@ class DbStore:
                 ),
                 {"d": today},
             ).scalar() or 0
+            ct = conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*) FROM visitations
+                    WHERE status = 'completed' AND departure_time::date = :d;
+                    """
+                ),
+                {"d": today},
+            ).scalar() or 0
             wv = conn.execute(
                 text(
                     """
@@ -1282,6 +1307,7 @@ class DbStore:
                 "visitsToday": int(vt),
                 "waitingForTriage": int(wt),
                 "newRegistrationsToday": int(nr),
+                "completedVisitsToday": ct,
             },
             "queue": [
                 {

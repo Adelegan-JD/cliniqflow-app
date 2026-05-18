@@ -96,7 +96,7 @@ export default function RecordOfficerRecords() {
                   </div>
                   <div className="min-w-0">
                     <h2 className="font-bold text-lg text-gray-900 truncate">
-                      Patient Records
+                     
                     </h2>
                     <p className="text-sm text-gray-600 mt-0.5">
                       Showing registrations for{" "}

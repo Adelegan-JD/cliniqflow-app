@@ -51,7 +51,15 @@ def create_visit(
         checked_in_by=_user.staff_id,
     )
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+        # Check if patient exists to distinguish between not found vs already has active visit
+        patient = store.get_patient(body.patient_id)
+        if not patient:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Patient already has an active visit. Please complete the current visit before creating a new one."
+            )
     created = row["created_at"]
     return {
         "visit_id": row["visit_id"],

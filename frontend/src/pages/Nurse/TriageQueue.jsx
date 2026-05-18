@@ -221,13 +221,16 @@ const TriageQueue = () => {
                       Patient ID
                     </th>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
-                      Age / Gender
+                      Age
                     </th>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
-                      Urgency
+                      Gender
                     </th>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
-                      Registered
+                      Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
+                      Time
                     </th>
                     <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">
                       Action
@@ -235,50 +238,51 @@ const TriageQueue = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredQueue.map((patient) => (
-                    <tr
-                      key={patient.patientId || patient.patient_id}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                        {patient.name || "Unknown"}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 font-mono">
-                        {patient.patientId || patient.patient_id}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {patient.age || "—"} /{" "}
-                        {patient.sex || patient.gender || "—"}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                            patient.urgency === "critical" ||
-                            patient.urgency === "emergency"
-                              ? "bg-red-100 text-red-700"
-                              : patient.urgency === "urgent"
-                                ? "bg-orange-100 text-orange-700"
-                                : "bg-green-100 text-green-700"
-                          }`}
-                        >
-                          {patient.urgency || "normal"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {patient.created_at
-                          ? new Date(patient.created_at).toLocaleString()
-                          : "—"}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => handleStartTriage(patient)}
-                          className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          Start Triage
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredQueue.map((patient) => {
+                    const createdDate = patient.created_at
+                      ? new Date(patient.created_at)
+                      : null;
+                    const dateStr = createdDate
+                      ? createdDate.toLocaleDateString()
+                      : "—";
+                    const timeStr = createdDate
+                      ? createdDate.toLocaleTimeString()
+                      : "—";
+
+                    return (
+                      <tr
+                        key={patient.patientId || patient.patient_id}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                          {patient.name || "Unknown"}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600 font-mono">
+                          {patient.patientId || patient.patient_id}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {patient.age || "—"}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {patient.sex || patient.gender || "—"}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {dateStr}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {timeStr}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => handleStartTriage(patient)}
+                            className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            Start Triage
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -65,14 +65,25 @@ def _decode_supabase_jwt(token: str) -> dict:
                 **decode_kwargs,
             )
 
-        signing_key = _supabase_jwks_client().get_signing_key_from_jwt(token).key
-        accepted_algs = [alg] if alg else ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"]
-        return jwt.decode(
-            token,
-            signing_key,
-            algorithms=accepted_algs,
-            **decode_kwargs,
-        )
+        # Try to fetch RS256 signing key from JWKS, but fall back to HS256 if network fails
+        try:
+            signing_key = _supabase_jwks_client().get_signing_key_from_jwt(token).key
+            accepted_algs = [alg] if alg else ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"]
+            return jwt.decode(
+                token,
+                signing_key,
+                algorithms=accepted_algs,
+                **decode_kwargs,
+            )
+        except Exception as jwks_err:
+            # JWKS fetch failed (network issue), fall back to HS256
+            print(f"[AUTH] JWKS fetch failed, falling back to HS256: {jwks_err}")
+            return jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=["HS256"],
+                **decode_kwargs,
+            )
     except jwt.ExpiredSignatureError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
