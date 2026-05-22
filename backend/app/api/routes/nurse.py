@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 
 from app.core.security import ROLE_NURSE, CurrentUser, require_roles
 from app.repositories import store
+from app.schemas.ai_contracts import VitalsUrgencyRequest
+from app.services import ai_engine_client
 
 router = APIRouter(prefix="/nurse", tags=["nurse"])
 
@@ -60,6 +62,49 @@ def triage_records(
     search: str | None = Query(None),
 ) -> list[dict[str, Any]]:
     return store.list_triage_records(urgency, search)
+
+
+def _normalize_urgency_level(level: str | None) -> str:
+    """
+    Normalize urgency level into the UI's triage buckets.
+
+    Accepts common variants returned by the AI engine (e.g. RED/YELLOW/GREEN).
+    """
+    x = (level or "").strip().lower()
+    m = {
+        "red": "emergency",
+        "critical": "emergency",
+        "emergency": "emergency",
+        "yellow": "urgent",
+        "high": "urgent",
+        "urgent": "urgent",
+        "green": "normal",
+        "moderate": "normal",
+        "low": "normal",
+        "normal": "normal",
+        "routine": "normal",
+    }
+    return m.get(x, "normal")
+
+
+@router.post("/vitals-urgency")
+def vitals_urgency(
+    body: VitalsUrgencyRequest,
+    _user: Annotated[CurrentUser, Depends(require_roles(ROLE_NURSE))],
+) -> dict[str, Any]:
+    """
+    Evaluate nurse-entered vitals and return an urgency badge.
+
+    This proxies to the AI engine's vitals urgency scorer and also includes a
+    `triage_status` field normalized to: emergency | urgent | normal.
+    """
+    data = ai_engine_client.post_json(
+        "/internal/nlp/vitals-urgency",
+        body.model_dump(exclude_none=True),
+    )
+    if isinstance(data, dict):
+        data.setdefault("triage_status", _normalize_urgency_level(data.get("urgency_level")))
+    return data
 
 
 def _submit_triage(
