@@ -253,7 +253,7 @@ class FullProcessRequest(BaseModel):
     session_id: Optional[str] = None
 
 
-@router.post("/process")
+@router.post("/nlp/process")  # added /nlp prefix
 async def process_transcript(request: FullProcessRequest):
     session_id = request.session_id or str(uuid.uuid4())
     start = time.perf_counter()

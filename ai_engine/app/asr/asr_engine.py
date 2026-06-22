@@ -19,6 +19,9 @@ if not hasattr(torchaudio, 'list_audio_backends'):
 if not hasattr(torchaudio, 'set_audio_backend'):
     torchaudio.set_audio_backend = lambda x: None
 
+if not hasattr(torchaudio, 'get_audio_backend'):
+    torchaudio.get_audio_backend = lambda: "soundfile"  # newly added
+
 if not hasattr(torchaudio, 'io'):
     io_module = types.ModuleType('torchaudio.io')
     class _StreamReader:

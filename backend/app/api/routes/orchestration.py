@@ -38,8 +38,8 @@ def guidelines_search(
     _user: Annotated[CurrentUser, Depends(require_roles(ROLE_DOCTOR))],
 ) -> dict[str, Any]:
     return ai_engine_client.post_json(
-        "/internal/rag/guidelines",
-        body.model_dump(exclude_none=True),
+        "/rag/guidelines",
+        body.model_dump(exclude_none=True),  # removed
     )
 
 
@@ -49,7 +49,7 @@ def dose_check(
     _user: Annotated[CurrentUser, Depends(require_roles(ROLE_DOCTOR))],
 ) -> dict[str, Any]:
     payload = body.model_dump()
-    return ai_engine_client.post_json("/internal/rag/dose-check", payload)
+    return ai_engine_client.post_json("/rag/dose-check", payload) # removed
 
 
 @router_nlp.post("/vitals-urgency")
@@ -58,7 +58,7 @@ def vitals_urgency(
     _user: Annotated[CurrentUser, Depends(require_roles(ROLE_NURSE))],
 ) -> dict[str, Any]:
     return ai_engine_client.post_json(
-        "/internal/nlp/vitals-urgency",
+        "/nlp/vitals-urgency",    #removed the internal prefix
         body.model_dump(exclude_none=True),
     )
 
@@ -81,4 +81,4 @@ async def translate_chunk(
         "session_id": session_id or "",
         "chunk_index": chunk_index or "0",
     }
-    return ai_engine_client.post_multipart("/internal/asr/transcribe-chunk", files, data)
+    return ai_engine_client.post_multipart("/asr/transcribe", files, data) #removed the internals as well

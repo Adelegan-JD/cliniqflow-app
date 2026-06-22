@@ -64,14 +64,15 @@ class HealthResponse(BaseModel):
 
 def _load_audio(file: UploadFile) -> np.ndarray:
     """Validate, read, and resample uploaded audio to mono float32 at 16 kHz."""
-    if file.content_type not in ALLOWED_TYPES:
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=415, detail=f"Unsupported file type: {file.content_type}")
 
     contents = file.file.read()
     if len(contents) > MAX_FILE_MB * 1024 * 1024:
         raise HTTPException(status_code=413, detail=f"File exceeds {MAX_FILE_MB} MB limit")
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
         tmp.write(contents)
         tmp_path = tmp.name
 
@@ -99,11 +100,11 @@ async def asr_health(request: Request):
 
 
 @router.post(
-    "/transcribe",
+    "/transcribe", #added the asr prefix
     response_model=TranscribeResponse,
     summary="Transcribe + diarize an audio file",
 )
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 async def transcribe(
     request: Request,
     file: UploadFile = File(..., description="Audio file (wav, mp3, mp4, webm, ogg)"),

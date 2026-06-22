@@ -99,5 +99,5 @@ def doctor_conversation(
         "patient_sex": body.patient_sex,
         "triage_vitals": body.triage_vitals,
     }
-    data = ai_engine_client.post_json("/internal/nlp/soap-from-transcript", payload)
+    data = ai_engine_client.post_json("/nlp/process", payload) # removed the internal
     return {"visit_id": visit_id, **data}
