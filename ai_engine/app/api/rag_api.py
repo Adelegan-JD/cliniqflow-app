@@ -14,8 +14,8 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.rag.dose_validator import DoseAssessmentResult, assess_dose
-from app.rag.llmengine import RAGEngine
+from app.Rag.dose_validator import DoseAssessmentResult, assess_dose
+from app.Rag.llmengine import RAGEngine
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def _get_rag_engine() -> RAGEngine:
     return _rag_engine
 
 
-# ── Pydantic schemas ───────────────────────────────────────────────────────────
+#  Pydantic schemas 
 
 class RetrieveRequest(BaseModel):
     query: str = Field(..., description="Medication or dosing question", example="What is the pediatric amoxicillin dosing range?")
@@ -86,7 +86,7 @@ class ValidateDoseResponse(BaseModel):
     processing_time_ms: float
 
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
+# ── Routes 
 
 @router.post("/retrieve", response_model=RetrieveResponse)
 async def retrieve_evidence(request: RetrieveRequest) -> RetrieveResponse:
