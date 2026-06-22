@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cliniq
+      POSTGRES_PASSWORD: cliniq
+      POSTGRES_DB: cliniqflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  ai_engine:
+    build:
+      context: ./ai_engine
+    environment:
+      openai_key: ${AI_ENGINE_TOKEN:-openai_key}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      ALLOWED_ORIGINS: http://localhost:8000,http://backend:8000
+    ports:
+      - "8001:8001"
+    volumes:
+      - ai_engine_cache:/root/.cache
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://cliniq:cliniq@db:5432/cliniqflow
+      AI_ENGINE_URL: http://ai_engine:8001
+      AI_ENGINE_TOKEN: ${AI_ENGINE_TOKEN:-openai_key}
+      CORS_ORIGINS: http://localhost:5173
+      CLINIQ_DEV_BYPASS_AUTH: "true"
+      SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-dev-insecure-change-me}
+      SUPABASE_JWT_VERIFY_AUD: "true"
+    depends_on:
+      - db
+      - ai_engine
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://example.supabase.co}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-dev-insecure-change-me}
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+
+volumes:
+  postgres_data:
+  ai_engine_cache:
