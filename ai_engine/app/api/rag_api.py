@@ -23,7 +23,7 @@ router = APIRouter(prefix="/rag", tags=["RAG & Medication Validation"])
 
 # Initialize RAG engine (lazy load on first request)
 _rag_engine: Optional[RAGEngine] = None
-_docs_path = Path("app/rag/files")  # Adjust path as needed
+_docs_path = Path("app/Rag/files")  # Adjust path as needed
 
 def _get_rag_engine() -> RAGEngine:
     global _rag_engine

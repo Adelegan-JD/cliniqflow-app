@@ -22,13 +22,32 @@ export default function Layout() {
       icon: <LayoutDashboard size={20} />,
       url: "/dashboard",
     },
-    // hide user management link if admin service is offline
-    ...(!adminError
-      ? [{ id: "users", label: "Users", icon: <Users size={20} />, url: "/dashboard/users" }]
-      : []),
-    { id: "records", label: "Records", icon: <FileText size={20} />, url: "/dashboard/records" },
-    { id: "settings", label: "Settings", icon: <Settings size={20} />, url: "/dashboard/settings" },
-    { id: "help", label: "Help & Support", icon: <HelpCircle size={20} />, url: "/dashboard/help" },
+    {
+      id: "users",
+      label: "Users",
+      icon: <Users size={20} />,
+      url: "/dashboard/users",
+      disabled: !!adminError,
+      disabledReason: "User service temporarily unavailable",
+    },
+    {
+      id: "records",
+      label: "Records",
+      icon: <FileText size={20} />,
+      url: "/dashboard/records",
+    },
+    {
+      id: "settings",
+      label: "Settings",
+      icon: <Settings size={20} />,
+      url: "/dashboard/settings",
+    },
+    {
+      id: "help",
+      label: "Help & Support",
+      icon: <HelpCircle size={20} />,
+      url: "/dashboard/help",
+    },
   ];
 
   const location = useLocation();
@@ -36,7 +55,8 @@ export default function Layout() {
 
   useEffect(() => {
     const path = location.pathname;
-    if (path === "/dashboard" || path === "/dashboard/") setActivePage("dashboard");
+    if (path === "/dashboard" || path === "/dashboard/")
+      setActivePage("dashboard");
     else if (path.startsWith("/dashboard/users")) setActivePage("users");
     else if (path.startsWith("/dashboard/records")) setActivePage("records");
     else if (path.startsWith("/dashboard/settings")) setActivePage("settings");
@@ -51,6 +71,7 @@ export default function Layout() {
         activeItem={activePage}
         onNavigate={setActivePage}
         userProfile={userProfile}
+        warningMessage={adminError}
       />
       <Outlet />
     </div>

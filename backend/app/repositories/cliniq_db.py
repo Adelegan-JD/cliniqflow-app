@@ -4,7 +4,10 @@ Used when `DATABASE_URL` is set (see `app.repositories` package init).
 """
 
 from __future__ import annotations
-
+from datetime import datetime, time, date
+from typing import Optional, List
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 import json
 import secrets
 from datetime import date, datetime, timezone
@@ -396,6 +399,22 @@ class DbStore:
             pid, _ = _resolve_patient_pid(conn, patient_id)
             if not pid:
                 return None
+            
+            # Check if patient already has an active visit
+            active_visit = conn.execute(
+                text(
+                    """
+                    SELECT id FROM visitations 
+                    WHERE patient_id = :pid AND status IN ('active', 'waiting', 'ongoing')
+                    LIMIT 1;
+                    """
+                ),
+                {"pid": pid},
+            ).scalar()
+            
+            if active_visit:
+                return None  # Patient already has an active visit
+            
             vn = _visit_number()
             for _ in range(50):
                 try:
@@ -528,6 +547,9 @@ class DbStore:
     def list_visits_for_nurse_queue(self) -> list[dict[str, Any]]:
         _require_conn()
         with engine.connect() as conn:
+            # Combine active queued visits waiting for triage with patients
+            # registered today (new registrations) who should also appear
+            # in the nurse triage queue.
             rows = conn.execute(
                 text(
                     """
@@ -540,13 +562,27 @@ class DbStore:
                     WHERE v.status = 'active'
                       AND q.current_stage = 'waiting'
                       AND q.status = 'queued'
-                    ORDER BY v.arrival_time ASC;
+
+                    UNION
+
+                    SELECT NULL AS visit_number, p.pid AS patient_id, p.created_at AS arrival_time, 'active' AS status,
+                           p.first_name, p.last_name, p.age, p.gender,
+                           'waiting' AS current_stage, 'queued' AS qstat
+                    FROM patients p
+                    WHERE p.created_at::date = CURRENT_DATE
+                      AND NOT EXISTS (
+                        SELECT 1 FROM visitations v2
+                        WHERE v2.patient_id = p.pid
+                          AND v2.arrival_time::date = CURRENT_DATE
+                      )
+
+                    ORDER BY arrival_time ASC;
                     """
                 )
             ).mappings().all()
             out = []
             for r in rows:
-                api_st = _api_visit_status(r["status"], r["current_stage"], r["qstat"])
+                api_st = _api_visit_status(r["status"], r["current_stage"], r["qstat"]) 
                 out.append(
                     {
                         "visit_id": r["visit_number"],
@@ -554,6 +590,7 @@ class DbStore:
                         "patient_name": f"{r['first_name']} {r['last_name']}".strip(),
                         "visit_status": api_st,
                         "triage_status": "PENDING",
+                        "status": "awaiting_triage",
                         "created_at": r["arrival_time"].isoformat()
                         if r["arrival_time"]
                         else "",
@@ -592,6 +629,52 @@ class DbStore:
                         "patient_name": f"{r['first_name']} {r['last_name']}".strip(),
                         "visit_status": api_st,
                         "triage_status": "COMPLETE",
+                        "created_at": r["arrival_time"].isoformat()
+                        if r["arrival_time"]
+                        else "",
+                        "age": r.get("age"),
+                        "gender": r.get("gender"),
+                    }
+                )
+            return out
+
+    def list_triaged_patients_for_doctor(self) -> list[dict[str, Any]]:
+        """Get all patients who have completed triage today and are ready for consultation."""
+        _require_conn()
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT v.visit_number, v.patient_id, v.arrival_time, v.status,
+                           p.first_name, p.last_name, p.age, p.gender,
+                           t.id as triage_id, t.urgency_level, t.triaged_at,
+                           q.current_stage, q.status AS qstat
+                    FROM visitations v
+                    JOIN patients p ON p.pid = v.patient_id
+                    JOIN triage t ON t.visit_id = v.id
+                    JOIN queue q ON q.visit_id = v.id
+                    WHERE v.status = 'active'
+                      AND q.current_stage = 'consultation'
+                      AND t.triaged_at::date = CURRENT_DATE
+                    ORDER BY t.triaged_at DESC;
+                    """
+                )
+            ).mappings().all()
+            out = []
+            for r in rows:
+                api_st = _api_visit_status(r["status"], r["current_stage"], r["qstat"])
+                ui_urg = _map_db_urgency_to_ui(r["urgency_level"])
+                out.append(
+                    {
+                        "visit_id": r["visit_number"],
+                        "patient_id": r["patient_id"],
+                        "patient_name": f"{r['first_name']} {r['last_name']}".strip(),
+                        "visit_status": api_st,
+                        "triage_status": "COMPLETE",
+                        "urgency_level": ui_urg,
+                        "triaged_at": r["triaged_at"].isoformat()
+                        if r.get("triaged_at")
+                        else "",
                         "created_at": r["arrival_time"].isoformat()
                         if r["arrival_time"]
                         else "",
@@ -650,6 +733,48 @@ class DbStore:
             ).scalar()
             if not n:
                 return None
+        return self.get_visit(visit_key)
+
+    def end_consultation(self, visit_key: str) -> dict[str, Any] | None:
+        """End consultation: mark visit as completed and queue as discharged."""
+        _require_conn()
+        with engine.begin() as conn:
+            v = _resolve_visit(conn, visit_key)
+            if not v:
+                return None
+            
+            # Update visitation status to completed
+            conn.execute(
+                text(
+                    """
+                    UPDATE visitations SET
+                        status = 'completed',
+                        departure_time = NOW(),
+                        updated_at = NOW()
+                    WHERE id = :vid;
+                    """
+                ),
+                {"vid": v["id"]},
+            )
+            
+            # Update queue to completed and discharged
+            qrow = conn.execute(
+                text(
+                    """
+                    UPDATE queue SET
+                        status = 'completed',
+                        current_stage = 'discharged',
+                        completed_at = NOW()
+                    WHERE visit_id = :vid
+                    RETURNING id;
+                    """
+                ),
+                {"vid": v["id"]},
+            ).scalar()
+            
+            if not qrow:
+                return None
+        
         return self.get_visit(visit_key)
 
     def doctor_dashboard_stats(self) -> dict[str, int]:
@@ -1109,6 +1234,15 @@ class DbStore:
                 ),
                 {"d": today},
             ).scalar() or 0
+            ct = conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*) FROM visitations
+                    WHERE status = 'completed' AND departure_time::date = :d;
+                    """
+                ),
+                {"d": today},
+            ).scalar() or 0
             wv = conn.execute(
                 text(
                     """
@@ -1143,11 +1277,37 @@ class DbStore:
                     """
                 )
             ).mappings().all()
+            todays_records = conn.execute(
+                text(
+                    """
+                    SELECT
+                        p.id,
+                        p.pid,
+                        p.first_name,
+                        p.last_name,
+                        p.other_names,
+                        p.gender,
+                        p.date_of_birth,
+                        p.created_at,
+                        p.registered_by,
+                        u.first_name AS officer_first_name,
+                        u.last_name AS officer_last_name,
+                        u.other_names AS officer_other_names,
+                        u.staff_id AS officer_staff_id
+                    FROM patients p
+                    LEFT JOIN users u ON u.staff_id = p.registered_by
+                    WHERE p.created_at::date = :d
+                    ORDER BY p.created_at DESC;
+                    """
+                ),
+                {"d": today},
+            ).mappings().all()
         return {
             "stats": {
                 "visitsToday": int(vt),
                 "waitingForTriage": int(wt),
                 "newRegistrationsToday": int(nr),
+                "completedVisitsToday": ct,
             },
             "queue": [
                 {
@@ -1182,7 +1342,89 @@ class DbStore:
                 }
                 for x in rr
             ],
+            "todayRecords": [
+                {
+                    "id": str(x["id"]),
+                    "pid": x["pid"],
+                    "name": f"{x['first_name']} {x['last_name']}".strip(),
+                    "otherNames": x.get("other_names"),
+                    "gender": x.get("gender"),
+                    "dateOfBirth": x["date_of_birth"].isoformat()
+                    if x.get("date_of_birth")
+                    else None,
+                    "date": x["created_at"].date().isoformat()
+                    if x.get("created_at")
+                    else None,
+                    "time": x["created_at"].strftime("%H:%M:%S")
+                    if x.get("created_at")
+                    else None,
+                    "registeredBy": " ".join(
+                        part
+                        for part in [
+                            x.get("officer_first_name"),
+                            x.get("officer_other_names"),
+                            x.get("officer_last_name"),
+                        ]
+                        if part
+                    ).strip()
+                    or x.get("officer_staff_id")
+                    or x.get("registered_by")
+                    or "—",
+                }
+                for x in todays_records
+            ],
         }
+    
+    def list_record_officer_records(self, on_date: str | None = None, skip: int = 0, limit: int = 500) -> list[dict[str, Any]]:
+        _require_conn()
+        # If no date provided, use today's date to preserve current behavior
+        if on_date is None:
+            on_date = datetime.utcnow().date().isoformat()
+        with engine.connect() as conn:
+            sql = """
+                SELECT
+                    p.id,
+                    p.pid,
+                    p.first_name,
+                    p.last_name,
+                    p.other_names,
+                    p.gender,
+                    p.date_of_birth,
+                    p.created_at,
+                    p.registered_by,
+                    u.first_name AS officer_first_name,
+                    u.last_name AS officer_last_name,
+                    u.other_names AS officer_other_names,
+                    u.staff_id AS officer_staff_id
+                FROM patients p
+                LEFT JOIN users u ON u.staff_id = p.registered_by
+                WHERE p.created_at::date = :d
+                ORDER BY p.created_at DESC
+                LIMIT :limit OFFSET :skip;
+            """
+            params = {"d": on_date, "limit": int(limit), "skip": int(skip)}
+            rows = conn.execute(text(sql), params).mappings().all()
+
+        return [
+            {
+                "id": str(x["id"]),
+                "pid": x["pid"],
+                "name": f"{x['first_name']} {x['last_name']}".strip(),
+                "otherNames": x.get("other_names"),
+                "gender": x.get("gender"),
+                "dateOfBirth": x["date_of_birth"].isoformat() if x.get("date_of_birth") else None,
+                "date": x["created_at"].date().isoformat() if x.get("created_at") else None,
+                "time": x["created_at"].strftime("%H:%M:%S") if x.get("created_at") else None,
+                "registeredBy": " ".join(
+                    part for part in [
+                        x.get("officer_first_name"),
+                        x.get("officer_other_names"),
+                        x.get("officer_last_name"),
+                    ] if part
+                ).strip() or x.get("officer_staff_id") or x.get("registered_by") or "—",
+            }
+            for x in rows
+        ]
 
 
 store = DbStore()

@@ -131,7 +131,14 @@ class MemoryStore:
         p = self.get_patient(patient_id)
         if not p:
             return None
+        
+        # Check if patient already has an active visit
         with self._lock:
+            for visit in self.visits.values():
+                if (visit.get("patient_id") == patient_id and 
+                    visit.get("visit_status") in [WAITING_FOR_TRIAGE, "ACTIVE", "ongoing"]):
+                    return None  # Patient already has an active visit
+            
             vid = self.next_visit_id()
             now = _utcnow()
             row = {
@@ -183,6 +190,31 @@ class MemoryStore:
                     "gender": p.get("gender") if p else None,
                 }
             )
+        # Also include patients registered today (new registrations) who do not yet have a visit
+        today = date.today().isoformat()
+        for pid, patient in self.patients.items():
+            created = patient.get("created_at") or ""
+            if not created.startswith(today):
+                continue
+            # skip if there's already a visit for this patient today
+            has_visit_today = any(
+                (v.get("patient_id") == pid and (v.get("created_at") or "").startswith(today))
+                for v in self.visits.values()
+            )
+            if has_visit_today:
+                continue
+            out.append(
+                {
+                    "visit_id": None,
+                    "patient_id": pid,
+                    "patient_name": f"{patient.get('firstName','')} {patient.get('lastName','')}".strip(),
+                    "visit_status": WAITING_FOR_TRIAGE,
+                    "triage_status": "PENDING",
+                    "created_at": created,
+                    "age": patient.get("age"),
+                    "gender": patient.get("gender"),
+                }
+            )
         return sorted(out, key=lambda x: x.get("created_at") or "", reverse=True)
 
     def list_visits_for_doctor_queue(self) -> list[dict[str, Any]]:
@@ -205,6 +237,35 @@ class MemoryStore:
                 }
             )
         return sorted(out, key=lambda x: x.get("created_at") or "", reverse=True)
+
+    def list_triaged_patients_for_doctor(self) -> list[dict[str, Any]]:
+        """Get all patients who have completed triage today and are ready for consultation."""
+        out = []
+        today = date.today().isoformat()
+        for v in self.visits.values():
+            st = normalize_visit_status(v.get("visit_status"))
+            # Only include patients who have been triaged and are waiting for doctor
+            if st not in (WAITING_FOR_DOCTOR, WITH_DOCTOR):
+                continue
+            # Only include today's visits
+            if not (v.get("created_at") or "").startswith(today):
+                continue
+            p = self.get_patient(v["patient_id"])
+            out.append(
+                {
+                    "visit_id": v["visit_id"],
+                    "patient_id": v["patient_id"],
+                    "patient_name": v.get("patient_name"),
+                    "visit_status": st,
+                    "triage_status": "COMPLETE",
+                    "urgency_level": (v.get("urgency_level") or "normal").lower(),
+                    "triaged_at": v.get("triage_date") or v.get("created_at"),
+                    "created_at": v.get("created_at"),
+                    "age": p.get("age") if p else None,
+                    "gender": p.get("gender") if p else None,
+                }
+            )
+        return sorted(out, key=lambda x: x.get("triaged_at") or "", reverse=True)
 
     def save_triage(
         self,
@@ -392,6 +453,12 @@ class MemoryStore:
             for v in self.visits.values()
             if normalize_visit_status(v.get("visit_status")) == WAITING_FOR_TRIAGE
         ]
+        completed_today = [
+            v
+            for v in self.visits.values()
+            if normalize_visit_status(v.get("visit_status")) == COMPLETED
+            and (v.get("created_at") or "").startswith(today)
+        ]
         recent_visits = sorted(
             self.visits.values(),
             key=lambda x: x.get("created_at") or "",
@@ -407,6 +474,10 @@ class MemoryStore:
                 "visitsToday": len(visits_today),
                 "waitingForTriage": len(waiting),
                 "newRegistrationsToday": len(regs_today),
+                "totalPatientsToday": len(regs_today),
+                "activeQueueCount": len(waiting),
+                "visitsCreatedToday": len(visits_today),
+                "completedVisitsToday": len(completed_today),
             },
             "queue": [
                 {

@@ -19,6 +19,9 @@ if not hasattr(torchaudio, 'list_audio_backends'):
 if not hasattr(torchaudio, 'set_audio_backend'):
     torchaudio.set_audio_backend = lambda x: None
 
+if not hasattr(torchaudio, 'get_audio_backend'):
+    torchaudio.get_audio_backend = lambda: "soundfile"  # newly added
+
 if not hasattr(torchaudio, 'io'):
     io_module = types.ModuleType('torchaudio.io')
     class _StreamReader:
@@ -36,6 +39,10 @@ import logging
 import os
 import numpy as np
 import torch
+
+# Compatibility shim for libraries referencing deprecated np.NaN under NumPy 2+
+if not hasattr(np, "NaN"):
+    np.NaN = np.nan
 
 from pyannote.audio import Pipeline as DiarizationPipeline
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
@@ -76,13 +83,27 @@ class ModelManager:
 
 def download_model_if_needed() -> str:
     """Returns local cache path. Downloads from HuggingFace only on first run."""
-    config_path = os.path.join(CACHE_DIR, "config.json")
-    if os.path.exists(config_path):
+    required = [
+        "config.json",
+        "generation_config.json",
+        "preprocessor_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json",
+        "merges.txt",
+        "model.safetensors",
+    ]
+    if all(os.path.exists(os.path.join(CACHE_DIR, f)) for f in required):
         logger.info(f"Whisper model found in cache at {CACHE_DIR} — skipping download")
         return CACHE_DIR
     logger.info(f"Downloading Whisper model: {MODEL_ID} (first run only)...")
     os.makedirs(CACHE_DIR, exist_ok=True)
-    snapshot_download(repo_id=MODEL_ID, local_dir=CACHE_DIR, token=HF_TOKEN)
+    snapshot_download(
+        repo_id=MODEL_ID,
+        local_dir=CACHE_DIR,
+        token=HF_TOKEN,
+        allow_patterns=required,
+    )
     logger.info(f"Download complete — saved to {CACHE_DIR}")
     return CACHE_DIR
 

@@ -17,10 +17,19 @@ export const getToken = async () => {
 
   if (data?.session) {
     const token = data.session.access_token;
-    // console.log(token)
     return token;
   }
 
+  // Fall back to refresh for cases where an access token has expired
+  // but Supabase still holds a valid refresh session.
+  const { data: refreshed, error: refreshError } =
+    await supabase.auth.refreshSession();
+  if (refreshed?.session?.access_token) {
+    return refreshed.session.access_token;
+  }
+
   if (error) console.error("Error fetching session:", error.message);
+  if (refreshError)
+    console.error("Error refreshing session:", refreshError.message);
   return null;
 };

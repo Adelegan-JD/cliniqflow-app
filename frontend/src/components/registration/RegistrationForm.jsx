@@ -3,13 +3,22 @@ import StepOne from "./StepOne";
 import StepTwo from "./StepTwo";
 import StepThree from "./StepThree";
 import StepFour from "./StepFour";
-import { api } from "../../utils/api";
 import { toast } from "react-toastify";
-import { validateStep1, validateStep2, validateStep3, validateStep4 } from "../../utils/registrationValidation";
+import {
+  validateStep1,
+  validateStep2,
+  validateStep3,
+  validateStep4,
+} from "../../utils/registrationValidation";
+import { useRegistrationStore } from "../../store/RegistrationStore";
 
 const RegistrationForm = () => {
   const [step, setStep] = useState(1);
   const [errors, setErrors] = useState({});
+  const [submitStatus, setSubmitStatus] = useState({
+    type: "idle",
+    message: "",
+  });
   const [formData, setFormData] = useState({
     // Step 1: Bio Data
     lastName: "",
@@ -105,39 +114,47 @@ const RegistrationForm = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setSubmitStatus({
+      type: "pending",
+      message: "Submitting patient registration...",
+    });
     try {
-      const patient = await api.post("/record-officer/register-patient", {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        otherNames: formData.otherNames || null,
-        dob: formData.dob,
-        gender: formData.gender,
-        civilStatus: formData.civilStatus || null,
-        religion: formData.religion || null,
-        tribe: formData.tribe || null,
-        nationality: formData.nationality || null,
-        phone: formData.phone,
-        altPhone: formData.altPhone || null,
-        email: formData.email || null,
-        address: formData.address,
-        state: formData.state || null,
-        lga: formData.lga || null,
-        nin: formData.nin || null,
-        nhisNumber: formData.nhisNumber || null,
-        militaryNumber: formData.militaryNumber || null,
-        education: formData.education || null,
-        occupation: formData.occupation || null,
-        nokName: formData.nokName,
-        nokRelationship: formData.nokRelationship,
-        nokPhone: formData.nokPhone,
-        nokAddress: formData.nokAddress || null,
+      // populate zustand store and use its submit action (which validates with Zod)
+      const { setFormData: syncFormData, submit } =
+        useRegistrationStore.getState();
+      console.log("[RegistrationForm] payload before store sync:", formData);
+      syncFormData(formData);
+      const result = await submit();
+      console.log("[RegistrationForm] submit result:", result);
+      if (!result.success) {
+        const validationDetails = result.errors
+          ? JSON.stringify(result.errors)
+          : null;
+        const networkDetails = result.error
+          ? result.error.status
+            ? `${result.error.message} (HTTP ${result.error.status})`
+            : result.error.message
+          : null;
+        throw (
+          result.error ||
+          new Error(
+            validationDetails || networkDetails || "Registration failed",
+          )
+        );
+      }
+      const patient = result.data;
+      setSubmitStatus({
+        type: "success",
+        message: patient?.pid
+          ? `Saved successfully as ${patient.pid}`
+          : "Saved successfully",
       });
-      toast.success(patient?.pid
-        ? `Patient ${patient.pid} (${formData.firstName} ${formData.lastName}) registered successfully!`
-        : `Patient ${formData.firstName} ${formData.lastName} registered successfully!`);
-      setStep(1);
-      setFormData((prev) => ({
-        ...prev,
+      toast.success(
+        patient?.pid
+          ? `Patient ${patient.pid} (${formData.firstName} ${formData.lastName}) registered successfully!`
+          : `Patient ${formData.firstName} ${formData.lastName} registered successfully!`,
+      );
+      syncFormData({
         lastName: "",
         firstName: "",
         otherNames: "",
@@ -163,8 +180,16 @@ const RegistrationForm = () => {
         nokPhone: "",
         nokRelationship: "",
         nokAddress: "",
-      }));
+      });
+      setStep(1);
     } catch (err) {
+      console.error("[RegistrationForm] registration error:", err);
+      setSubmitStatus({
+        type: "error",
+        message: err?.status
+          ? `${err.message} (HTTP ${err.status})`
+          : err?.message || "Registration failed",
+      });
       toast.error(err.message || "Registration failed");
     } finally {
       setIsSubmitting(false);
@@ -194,19 +219,49 @@ const RegistrationForm = () => {
         </div>
       </div>
 
+      {submitStatus.type !== "idle" && (
+        <div
+          className={`mx-8 mt-4 rounded-lg border px-4 py-3 text-sm ${
+            submitStatus.type === "success"
+              ? "border-green-200 bg-green-50 text-green-700"
+              : submitStatus.type === "error"
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-blue-200 bg-blue-50 text-blue-700"
+          }`}
+        >
+          {submitStatus.message}
+        </div>
+      )}
+
       <div className="p-8">
         {/* Render Steps */}
         {step === 1 && (
-          <StepOne formData={formData} handleChange={handleChange} errors={errors} />
+          <StepOne
+            formData={formData}
+            handleChange={handleChange}
+            errors={errors}
+          />
         )}
         {step === 2 && (
-          <StepTwo formData={formData} handleChange={handleChange} errors={errors} />
+          <StepTwo
+            formData={formData}
+            handleChange={handleChange}
+            errors={errors}
+          />
         )}
         {step === 3 && (
-          <StepThree formData={formData} handleChange={handleChange} errors={errors} />
+          <StepThree
+            formData={formData}
+            handleChange={handleChange}
+            errors={errors}
+          />
         )}
         {step === 4 && (
-          <StepFour formData={formData} handleChange={handleChange} errors={errors} />
+          <StepFour
+            formData={formData}
+            handleChange={handleChange}
+            errors={errors}
+          />
         )}
 
         {/* Navigation */}

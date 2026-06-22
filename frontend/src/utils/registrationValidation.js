@@ -68,7 +68,7 @@ export function validateStep1(formData) {
     errors.gender = "Gender is required";
   }
 
-  // Civil Status: required
+  // Civil Status: required by the UI flow
   if (!formData.civilStatus) {
     errors.civilStatus = "Civil status is required";
   }
@@ -134,7 +134,7 @@ export function validateStep2(formData) {
     errors.state = "State of residence is required";
   }
 
-  // LGA: required when state selected
+  // LGA: required when state is selected
   if (formData.state && !formData.lga) {
     errors.lga = "Local Government Area is required";
   }
@@ -199,13 +199,13 @@ export function validateStep4(formData) {
     errors.nokPhone = "Enter valid Nigerian number (e.g. 08011122233)";
   }
 
-  // NOK Address: required, 5-200 chars
-  if (!formData.nokAddress?.trim()) {
-    errors.nokAddress = "Next of kin address is required";
-  } else if (formData.nokAddress.trim().length < 5) {
-    errors.nokAddress = "At least 5 characters required";
-  } else if (formData.nokAddress.trim().length > 200) {
-    errors.nokAddress = "Maximum 200 characters";
+  // NOK Address: optional in backend metadata
+  if (formData.nokAddress?.trim()) {
+    if (formData.nokAddress.trim().length < 5) {
+      errors.nokAddress = "At least 5 characters if provided";
+    } else if (formData.nokAddress.trim().length > 200) {
+      errors.nokAddress = "Maximum 200 characters";
+    }
   }
 
   return { valid: Object.keys(errors).length === 0, errors };

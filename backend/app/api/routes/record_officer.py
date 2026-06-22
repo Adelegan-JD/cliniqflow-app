@@ -53,13 +53,30 @@ def search_patients(
     return store.search_patients(q, search_by)
 
 
+@router.get("/records", response_model=list[dict[str, Any]])
+def records(
+    _user: Annotated[
+        CurrentUser,
+        Depends(require_roles(ROLE_RECORD_OFFICER, ROLE_DOCTOR, ROLE_NURSE, ROLE_ADMIN)),
+    ],
+    date: str | None = Query(None, description="YYYY-MM-DD; if omitted, returns today's records"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(500, ge=1, le=2000),
+) -> list[dict[str, Any]]:
+    rows = store.list_record_officer_records(on_date=date, skip=skip, limit=limit)
+    return rows
+
+
 @router.post("/register-patient")
 def register_patient(
     body: RegisterPatientBody,
     _user: Annotated[CurrentUser, Depends(require_roles(ROLE_RECORD_OFFICER))],
 ) -> dict[str, Any]:
     data = body.model_dump()
-    row = store.register_patient(data, registered_by=_user.staff_id)
+    try:
+        row = store.register_patient(data, registered_by=_user.staff_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return {"pid": row["pid"], "id": row["id"], **row}
 
 
@@ -75,7 +92,15 @@ def create_visit(
         checked_in_by=_user.staff_id,
     )
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+        # Check if patient exists to distinguish between not found vs already has active visit
+        patient = store.get_patient(body.patient_id)
+        if not patient:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Patient already has an active visit. Please complete the current visit before creating a new one."
+            )
     created = row["created_at"]
     return {
         "visit_id": row["visit_id"],

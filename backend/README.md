@@ -1,157 +1,239 @@
-# cliniqflow-backend
+# CliniqFlow Backend
 
-This folder contains the backend support code for the CliniqFlow application.
-It provides database connectivity, user authentication, password hashing, session token generation, and entity registration helpers for staff and patients.
+The backend is the central API and data layer for CliniqFlow. It manages patient records, visits, triage, and staff access, and it orchestrates calls to the AI engine when clinical automation is needed. This is the service that the frontend talks to.
 
-## What’s included
+At a glance:
+- Exposes role-based REST APIs for record officers, nurses, doctors, and admins
+- Persists patient, visit, and triage data in PostgreSQL (or in-memory if not configured)
+- Validates access using Supabase JWTs (or a local JWT flow when enabled)
+- Proxies AI workflows (SOAP, vitals urgency, transcription) to the AI engine
 
-- `auth/jwt.py` - JWT creation, verification, access/refresh token helpers, expiry handling.
-- `auth/security.py` - password hashing and authentication helpers, role validation.
-- `auth/service.py` - login, refresh, token authorization, and current user lookup.
-- `database/config.py` - SQLAlchemy database engine configuration and connection helper.
-- `database/schema.py` - data model DDL for tables used by CliniqFlow.
-- `database/registration.py` - staff and patient registration workflows.
-- `database/id_generator.py` - unique patient and staff ID generation logic.
+## What this backend is responsible for
 
-## Requirements
+- Identity and access
+  - Role-based authorization for admin, doctor, nurse, and record officer
+  - Supabase JWT verification with optional local JWT fallback
+- Clinical workflow state
+  - Patient registration and search
+  - Visit creation and queue state
+  - Nurse triage submission
+  - Doctor encounter documentation and SOAP summaries
+- Orchestration to AI engine
+  - Vitals urgency scoring
+  - Transcript-to-SOAP processing
+  - Audio transcription proxying
 
-Dependencies are tracked in `requirements.txt`.
+## Key workflows (plain English)
 
-Key packages:
+1) Record officer registers a patient
+- Creates a patient profile and optional metadata.
 
-- `fastapi`
-- `uvicorn`
-- `sqlalchemy`
-- `psycopg2-binary`
-- `python-dotenv`
-- `pydantic`
-- `bcrypt`
+2) Record officer creates a visit
+- Visit enters the triage queue with a WAITING_FOR_TRIAGE status.
 
-## Setup
+3) Nurse triage
+- Nurse captures vitals and urgency, which can be sent to the AI engine for scoring.
 
-1. Create a Python virtual environment in the repository root or backend folder.
-2. Install backend dependencies:
+4) Doctor encounter
+- Doctor pulls from queue, records SOAP notes, and closes the visit.
 
-```powershell
-python -m pip install -r backend/requirements.txt
+5) Admin operations
+- Admin invites staff and tracks metrics.
+
+## API overview
+
+Health
+- GET /health
+
+Record officer
+- GET /record-officer/dashboard
+- GET /record-officer/patients
+- GET /record-officer/patients/search
+- POST /record-officer/register-patient
+- POST /record-officer/visits
+
+Nurse
+- GET /nurse/queue
+- GET /nurse/stats
+- GET /nurse/triage-records
+- POST /nurse/triage
+
+Doctor
+- GET /doctor/queue
+- GET /doctor/stats
+- GET /doctor/examination-records
+- POST /doctor/start-exam
+- POST /doctor/cancel-exam
+- POST /doctor/save-visit
+
+Admin
+- GET /admin/users
+- POST /admin/invite-user
+- GET /admin/stats
+- GET /admin/metrics
+
+REST resources for integrations
+- GET /patients
+- GET /patients/{patient_id}
+- POST /patients
+- GET /visits
+- GET /visits/{visit_id}
+- POST /visits
+- POST /visits/{visit_id}/doctor-conversation
+
+AI orchestration
+- POST /nlp/vitals-urgency
+- POST /ai/guidelines
+- POST /ai/dose-check
+- POST /translate/chunk
+
+Docs: http://127.0.0.1:8000/docs
+
+## Example requests
+
+Register a patient:
+
+```json
+POST /record-officer/register-patient
+{
+  "firstName": "Ada",
+  "lastName": "Okafor",
+  "dob": "1994-05-12",
+  "gender": "Female",
+  "phone": "08012345678",
+  "address": "12 Unity Road, Lagos",
+  "nokName": "Chinedu Okafor",
+  "nokRelationship": "Brother",
+  "nokPhone": *******
+}
 ```
 
-3. Copy the example environment file:
+Create a visit:
 
-```powershell
-copy backend\.env.example backend\.env
+```json
+POST /record-officer/visits
+{
+  "patient_id": "<patient_uuid>",
+  "reason_for_visit": "Fever and cough",
+  "department": "General Outpatient"
+}
 ```
 
-4. Update `backend/.env` with your database connection URL and JWT secret values.
+Submit nurse triage:
 
-## Environment Variables
-
-The backend expects the following environment variables:
-
-- `DATABASE_URL` - PostgreSQL connection URL.
-- `JWT_SECRET` - secret used to sign JWT tokens.
-- `JWT_ISSUER` - issuer claim for JWTs (default: `cliniqflow-backend`).
-- `JWT_AUDIENCE` - audience claim for JWTs (default: `cliniqflow-client`).
-- `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` - access token lifetime in minutes.
-- `JWT_REFRESH_TOKEN_EXPIRE_DAYS` - refresh token lifetime in days.
-- `BCRYPT_ROUNDS` - bcrypt work factor for password hashing.
-
-## Database Initialization
-
-The backend includes `database/schema.py` for creating the main application tables.
-Run it directly after configuring `DATABASE_URL`:
-
-```powershell
-python backend\database\schema.py
+```json
+POST /nurse/triage
+{
+  "visit_id": "<visit_id>",
+  "patient_id": "<patient_uuid>",
+  "urgency_level": "urgent",
+  "vitals": {
+    "temperature": 38.9,
+    "heart_rate": 115,
+    "respiratory_rate": 24,
+    "oxygen_saturation": 92
+  }
+}
 ```
 
-This will create tables for:
 
-- `users`
-- `patients`
-- `patients_metadata`
-- `visitations`
-- `triage`
-- `queue`
-- `consultations`
-- `ai_notes`
-- `dosage_logs`
-- `medical_knowledge`
+## Authentication and roles
 
-## Authentication and Session Management
+The backend expects a Bearer token. It supports two modes:
 
-The backend provides JWT-based authentication helpers.
+- Supabase JWT validation (default)
+  - Verifies tokens using Supabase JWT secret or JWKS.
+- Local JWT fallback
+  - If `JWT_SECRET` is set, the backend can use the local auth helpers in `auth/`.
 
-- `auth/security.py` handles password hashing and verification.
-- `auth/jwt.py` builds signed JWTs and verifies them.
-- `auth/service.py` exposes login, refresh, and role-based authorization flows.
+Dev bypass:
+- When `CLINIQ_DEV_BYPASS_AUTH=true`, the backend accepts any Bearer token and uses these debug headers:
+  - `X-Debug-Role`
+  - `X-Debug-User-Id`
+  - `X-Debug-Staff-Id`
 
-Typical flow:
+Supported roles:
+- admin
+- doctor
+- nurse
+- record_officer
 
-1. Authenticate staff credentials with `auth/security.authenticate_staff`.
-2. Issue tokens using `auth/jwt.create_access_token` and `auth/jwt.create_refresh_token`.
-3. Verify bearer tokens from requests using `auth/service.extract_bearer_token` and `auth/service.authorize_staff_token`.
+## Data and persistence
 
-## Registration and ID Generation
+This service stores clinical workflow data using SQLAlchemy.
 
-- `database/registration.py` handles staff and patient creation.
-- `database/id_generator.py` reserves unique IDs for staff and patients.
+Core tables:
+- users
+- patients
+- patients_metadata
+- visitations
+- triage
+- queue
+- consultations
+- ai_notes
+- dosage_logs
+- medical_knowledge
 
-Staff IDs use role-based prefixes such as `ADM-xxxx`, `DOC-xxxx`, `NUR-xxxx`, and `REC-xxxx`.
-Patient IDs use `PID` with a date-based code and random digits.
+If `DATABASE_URL` is not configured, the backend uses an in-memory store for development.
 
-## Integration Notes
+## Environment variables
 
-This folder is designed as the core backend module for CliniqFlow.
-A FastAPI application can import these modules to implement actual API endpoints for login, registration, patient lookup, and authorization.
+Core:
+- DATABASE_URL: PostgreSQL connection string
+- CORS_ORIGINS: comma-separated list of allowed origins
 
-Example import paths:
+Supabase JWT:
+- SUPABASE_URL
+- SUPABASE_JWT_SECRET
+- SUPABASE_JWT_ISSUER (optional)
+- SUPABASE_JWKS_URL (optional)
+- SUPABASE_JWT_VERIFY_AUD (true or false)
 
-```python
-from database.config import engine
-from auth.service import login_staff, get_current_staff, refresh_staff_session
-from database.registration import register_staff, register_patient
+AI engine orchestration:
+- AI_ENGINE_URL :
+- AI_ENGINE_TOKEN (Bearer token used for AI engine calls)
+
+Local auth fallback:
+- JWT_SECRET (enables local JWT validation helpers)
+
+Dev mode:
+- CLINIQ_DEV_BYPASS_AUTH (true or false)
+
+## Folder structure
+
+```
+backend/
+├── app/
+│   ├── api/routes/          # REST endpoints by role
+│   ├── core/                # settings, security, error handling
+│   ├── repositories/        # database + in-memory storage
+│   ├── schemas/             # request/response contracts
+│   └── services/            # AI engine HTTP client
+├── auth/                    # local JWT auth helpers (optional)
+├── database/                # SQLAlchemy engine + schema
+├── tests/
+├── requirements.txt
+└── README.md
 ```
 
-## Testing
+## Run locally (Windows PowerShell)
 
-There are no dedicated test files in this folder yet.
-For local validation, ensure the database connection works and the schema can be created.
-
-## Troubleshooting
-
-- If `DATABASE_URL` is missing, `database/config.py` raises an error on import.
-- If `JWT_SECRET` is missing, `auth/jwt.py` will raise a validation error.
-- Use `BCRYPT_ROUNDS=12` or higher for production; lower values are acceptable only for local development.
-
-## License
-
-Use this backend code according to your project policies.
-# Backend
-
-FastAPI service. Runs on **port 8000** by default.
-
-## Run locally
-
-```bash
+```
 cd backend
 python -m venv .venv
-```
-
-**Windows (PowerShell):** `.\.venv\Scripts\Activate.ps1`  
-**Windows (cmd):** `.\.venv\Scripts\activate.bat`
-
-```bash
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-- **Docs:** http://127.0.0.1:8000/docs  
-- **Health:** http://127.0.0.1:8000/health (`persistence` is `postgres` only if `DATABASE_URL` is set)
+## Testing
 
-
-## Tests
-
-```bash
+```
 pytest
 ```
+
+## Troubleshooting
+
+- If `DATABASE_URL` is missing, `database/config.py` will raise an error on import.
+- If Supabase JWT validation fails, verify `SUPABASE_URL` and `SUPABASE_JWT_SECRET`.
+- If AI calls fail, check `AI_ENGINE_URL` and `AI_ENGINE_TOKEN`.

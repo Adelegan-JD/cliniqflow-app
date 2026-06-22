@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 
 from app.core.security import ROLE_NURSE, CurrentUser, require_roles
 from app.repositories import store
+from app.schemas.ai_contracts import VitalsUrgencyRequest
+from app.services import ai_engine_client
 
 router = APIRouter(prefix="/nurse", tags=["nurse"])
 
@@ -18,7 +20,7 @@ def _normalize_nurse_queue_item(item: dict[str, Any]) -> dict[str, Any]:
         "age": item.get("age"),
         "sex": item.get("gender") or item.get("sex"),
         "gender": item.get("gender"),
-        "status": "awaiting_triage",
+        "status": item.get("status") or "awaiting_triage",
         "urgency": item.get("urgency") or "normal",
         "visit_status": item.get("visit_status"),
         "triage_status": item.get("triage_status"),
@@ -44,7 +46,7 @@ def nurse_stats(
 
 
 class TriageSubmitRequest(BaseModel):
-    visit_id: str
+    visit_id: str | None = None
     patient_id: str
     vitals: dict[str, Any] = Field(default_factory=dict)
     urgency_level: str | None = Field(
@@ -62,12 +64,71 @@ def triage_records(
     return store.list_triage_records(urgency, search)
 
 
+def _normalize_urgency_level(level: str | None) -> str:
+    """
+    Normalize urgency level into the UI's triage buckets.
+
+    Accepts common variants returned by the AI engine (e.g. RED/YELLOW/GREEN).
+    """
+    x = (level or "").strip().lower()
+    m = {
+        "red": "emergency",
+        "critical": "emergency",
+        "emergency": "emergency",
+        "yellow": "urgent",
+        "high": "urgent",
+        "urgent": "urgent",
+        "green": "normal",
+        "moderate": "normal",
+        "low": "normal",
+        "normal": "normal",
+        "routine": "normal",
+    }
+    return m.get(x, "normal")
+
+
+@router.post("/vitals-urgency")
+def vitals_urgency(
+    body: VitalsUrgencyRequest,
+    _user: Annotated[CurrentUser, Depends(require_roles(ROLE_NURSE))],
+) -> dict[str, Any]:
+    """
+    Evaluate nurse-entered vitals and return an urgency badge.
+
+    This proxies to the AI engine's vitals urgency scorer and also includes a
+    `triage_status` field normalized to: emergency | urgent | normal.
+    """
+    data = ai_engine_client.post_json(
+        "/internal/nlp/vitals-urgency",
+        body.model_dump(exclude_none=True),
+    )
+    if isinstance(data, dict):
+        data.setdefault("triage_status", _normalize_urgency_level(data.get("urgency_level")))
+    return data
+
+
 def _submit_triage(
     body: TriageSubmitRequest, staff_id: str | None
 ) -> dict[str, Any]:
     try:
+        visit_id = body.visit_id
+        # If frontend did not provide a visit id (new registration), create a visit
+        if not visit_id:
+            # create_visit expects patient_id and returns a visit row
+            created = store.create_visit(
+                patient_id=body.patient_id,
+                reason_for_visit=None,
+                department=None,
+                checked_in_by=staff_id,
+            )
+            if not created:
+                raise ValueError("Failed to create visit for patient")
+            visit_id = created.get("visit_id") or created.get("visit_uuid") or created.get("visit_id")
+
+        # ensure visit_id is a string for downstream save_triage
+        visit_id = str(visit_id)
         ev = store.save_triage(
-            visit_id=body.visit_id,
+            visit_id=visit_id,
             patient_id=body.patient_id,
             vitals=body.vitals,
             urgency=body.urgency_level,

@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import (
     admin,
+    consultation,
     doctor,
     health,
     nurse,
@@ -22,7 +23,12 @@ app = FastAPI(
     version="0.1.0",
 )
 
-origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+#origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+
+origins = [
+    "http://192.168.18.9:5173",  # Your Vite frontend IP
+    "http://localhost:5173",     # Localhost frontend
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins or ["http://localhost:5173"],
@@ -33,6 +39,7 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(admin.router)
+app.include_router(consultation.router)
 app.include_router(doctor.router)
 app.include_router(record_officer.router)
 app.include_router(nurse.router)
@@ -53,5 +60,5 @@ async def http_exception_handler(_request, exc: HTTPException) -> JSONResponse:
     )
 
 
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler) #type: ignore
 app.add_exception_handler(Exception, generic_exception_handler)

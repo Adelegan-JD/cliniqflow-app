@@ -1,9 +1,24 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { api } from "../utils/api";
 import { getTriageResult } from "../utils/triageRules";
-import { User, Activity, ArrowLeft, CheckCircle, Clock, AlertTriangle, Info, Loader2 } from "lucide-react";
+import {
+  User,
+  Activity,
+  ArrowLeft,
+  CheckCircle,
+  Clock,
+  AlertTriangle,
+  Info,
+  Loader2,
+} from "lucide-react";
+import { toast } from "react-toastify";
 
-export default function TriageForm({ patient, onCancel, onSave, initialVitals }) {
+export default function TriageForm({
+  patient,
+  onCancel,
+  onSave,
+  initialVitals,
+}) {
   const [vitals, setVitals] = useState({
     temperature: initialVitals?.temperature || "",
     bpSystolic: initialVitals?.bpSystolic || "",
@@ -19,7 +34,15 @@ export default function TriageForm({ patient, onCancel, onSave, initialVitals })
   const [triageStatus, setTriageStatus] = useState(null); // 'emergency' | 'urgent' | 'normal' | null
   const [triageMethod, setTriageMethod] = useState(null); // 'rule_based' | 'llm' | null
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const calculateBMI = (weight, height) => {
     if (weight && height) {
@@ -36,7 +59,7 @@ export default function TriageForm({ patient, onCancel, onSave, initialVitals })
     if (name === "weight" || name === "height") {
       updatedVitals.bmi = calculateBMI(
         name === "weight" ? value : updatedVitals.weight,
-        name === "height" ? value : updatedVitals.height
+        name === "height" ? value : updatedVitals.height,
       );
     }
 
@@ -47,88 +70,124 @@ export default function TriageForm({ patient, onCancel, onSave, initialVitals })
     if (errorMessage) setErrorMessage("");
   };
 
-const handleEvaluate = async () => {
-  // Basic validation to ensure essential fields for evaluation aren't empty
-  if (!vitals.bpSystolic || !vitals.bpDiastolic || !vitals.respiratoryRate) {
-    setErrorMessage("Please fill in blood pressure and respiratory rate to evaluate.");
-    return;
-  }
+  const handleEvaluate = async () => {
+    // Basic validation to ensure essential fields for evaluation aren't empty
+    if (!vitals.bpSystolic || !vitals.bpDiastolic || !vitals.respiratoryRate) {
+      setErrorMessage(
+        "Please fill in blood pressure and respiratory rate to evaluate.",
+      );
+      return;
+    }
 
-  setIsEvaluating(true);
-  setErrorMessage("");
-  setTriageStatus(null);
-  setTriageMethod(null);
+    setIsEvaluating(true);
+    setErrorMessage("");
+    setTriageStatus(null);
+    setTriageMethod(null);
 
-  const ageStr = patient.age != null && patient.age !== ""
-    ? (typeof patient.age === "number" ? `${patient.age} years` : String(patient.age))
-    : null;
+    const ageStr =
+      patient.age != null && patient.age !== ""
+        ? typeof patient.age === "number"
+          ? `${patient.age} years`
+          : String(patient.age)
+        : null;
 
-  const payload = {
-    patient_age: ageStr || null,
-    patient_sex: patient.gender ? patient.gender.toLowerCase() : "unknown",
-    temperature: vitals.temperature ? parseFloat(vitals.temperature) : null,
-    bp_systolic: vitals.bpSystolic ? parseInt(vitals.bpSystolic, 10) : null,
-    bp_diastolic: vitals.bpDiastolic ? parseInt(vitals.bpDiastolic, 10) : null,
-    heart_rate: vitals.heartRate ? parseInt(vitals.heartRate, 10) : null,
-    respiratory_rate: vitals.respiratoryRate ? parseInt(vitals.respiratoryRate, 10) : null,
-    oxygen_saturation: vitals.oxygenSaturation ? parseFloat(vitals.oxygenSaturation) : null,
-    weight_kg: vitals.weight ? parseFloat(vitals.weight) : null,
-    height_cm: vitals.height ? parseFloat(vitals.height) : null,
-  };
-
-  try {
-    // First try local rule-based evaluation for reliability
-    const ruleResult = getTriageResult({ symptoms: patient?.symptoms || "" });
-    const localMap = {
-      RED: "emergency",
-      YELLOW: "urgent",
-      GREEN: "normal",
+    const payload = {
+      patient_age: ageStr || null,
+      patient_sex: patient.gender ? patient.gender.toLowerCase() : "unknown",
+      temperature: vitals.temperature ? parseFloat(vitals.temperature) : null,
+      bp_systolic: vitals.bpSystolic ? parseInt(vitals.bpSystolic, 10) : null,
+      bp_diastolic: vitals.bpDiastolic
+        ? parseInt(vitals.bpDiastolic, 10)
+        : null,
+      heart_rate: vitals.heartRate ? parseInt(vitals.heartRate, 10) : null,
+      respiratory_rate: vitals.respiratoryRate
+        ? parseInt(vitals.respiratoryRate, 10)
+        : null,
+      oxygen_saturation: vitals.oxygenSaturation
+        ? parseFloat(vitals.oxygenSaturation)
+        : null,
+      weight_kg: vitals.weight ? parseFloat(vitals.weight) : null,
+      height_cm: vitals.height ? parseFloat(vitals.height) : null,
     };
 
-    const localUrgency = localMap[ruleResult.level] || "normal";
-
-    if (import.meta.env.CLINIQ_AUTH_MODE === "supabase") {
-      setTriageStatus(localUrgency);
-      setTriageMethod("rule_based");
-    } else {
-      // non-supabase: also attempt backend NLP endpoint
-      const data = await api.post("/nlp/vitals-urgency", payload);
-      const normalized = data.urgency_level ? data.urgency_level.toLowerCase() : localUrgency;
-      const statusMap = {
-        red: "emergency",
-        yellow: "urgent",
-        green: "normal",
-        emergency: "emergency",
-        urgent: "urgent",
-        normal: "normal",
-        critical: "critical",
+    try {
+      // First try local rule-based evaluation for reliability
+      const ruleResult = getTriageResult({ symptoms: patient?.symptoms || "" });
+      const localMap = {
+        RED: "emergency",
+        YELLOW: "urgent",
+        GREEN: "normal",
       };
-      setTriageStatus(statusMap[normalized] || localUrgency);
-      setTriageMethod(data.method || "rule_based");
-    }
-  } catch (error) {
-    console.error("Error fetching urgency level:", error);
-    setTriageStatus("normal");
-    setTriageMethod("rule_based");
-    setErrorMessage("Failed to evaluate vitals via service; using local assessment.");
-  } finally {
-    setIsEvaluating(false);
-  }
-};
 
-  const handleSubmit = (e) => {
+      const localUrgency = localMap[ruleResult.level] || "normal";
+
+      if (import.meta.env.CLINIQ_AUTH_MODE === "supabase") {
+        setTriageStatus(localUrgency);
+        setTriageMethod("rule_based");
+      } else {
+        // non-supabase: also attempt backend NLP endpoint
+        const data = await api.post("/nlp/vitals-urgency", payload);
+        const normalized = data.urgency_level
+          ? data.urgency_level.toLowerCase()
+          : localUrgency;
+        const statusMap = {
+          red: "emergency",
+          yellow: "urgent",
+          green: "normal",
+          emergency: "emergency",
+          urgent: "urgent",
+          normal: "normal",
+          critical: "critical",
+        };
+        setTriageStatus(statusMap[normalized] || localUrgency);
+        setTriageMethod(data.method || "rule_based");
+      }
+    } catch (error) {
+      console.error("Error fetching urgency level:", error);
+      setTriageStatus("normal");
+      setTriageMethod("rule_based");
+      setErrorMessage(
+        "Failed to evaluate vitals via service; using local assessment.",
+      );
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave(patient.id, vitals, triageStatus);
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave(patient.id, vitals, triageStatus);
+      // show success toast (ToastContainer is at app root)
+      toast.success("Triage completed successfully");
+    } catch (err) {
+      console.error("Error completing triage:", err);
+      toast.error("Failed to complete triage. Try again.");
+      // rethrow if needed or allow caller to handle
+    } finally {
+      if (mountedRef.current) setIsSaving(false);
+    }
   };
 
   const renderAlertBanner = () => {
     if (!triageStatus) return null;
 
-    const methodBadge = triageMethod === "llm" ? (
-      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${triageStatus === "normal" ? "bg-green-200/80 text-green-800" : "bg-white/20"}`}>AI-assisted</span>
-    ) : triageMethod === "rule_based" ? (
-      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${triageStatus === "normal" ? "bg-green-200/80 text-green-800" : "bg-white/20"}`}>Rule-based</span>
-    ) : null;
+    const methodBadge =
+      triageMethod === "llm" ? (
+        <span
+          className={`text-xs px-2 py-0.5 rounded-full font-medium ${triageStatus === "normal" ? "bg-green-200/80 text-green-800" : "bg-white/20"}`}
+        >
+          AI-assisted
+        </span>
+      ) : triageMethod === "rule_based" ? (
+        <span
+          className={`text-xs px-2 py-0.5 rounded-full font-medium ${triageStatus === "normal" ? "bg-green-200/80 text-green-800" : "bg-white/20"}`}
+        >
+          Rule-based
+        </span>
+      ) : null;
 
     if (triageStatus === "emergency") {
       return (
@@ -136,10 +195,14 @@ const handleEvaluate = async () => {
           <AlertTriangle size={28} className="shrink-0 mt-0.5" />
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-black text-xl tracking-wide uppercase">Emergency</h3>
+              <h3 className="font-black text-xl tracking-wide uppercase">
+                Emergency
+              </h3>
               {methodBadge}
             </div>
-            <p className="font-medium text-red-50">Patient requires immediate medical attention.</p>
+            <p className="font-medium text-red-50">
+              Patient requires immediate medical attention.
+            </p>
           </div>
         </div>
       );
@@ -148,13 +211,20 @@ const handleEvaluate = async () => {
     if (triageStatus === "urgent") {
       return (
         <div className="mb-6 bg-yellow-100 border border-yellow-300 text-yellow-800 p-4 rounded-xl shadow-sm flex items-start gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
-          <AlertTriangle size={28} className="text-yellow-600 shrink-0 mt-0.5" />
+          <AlertTriangle
+            size={28}
+            className="text-yellow-600 shrink-0 mt-0.5"
+          />
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-bold text-lg tracking-wide uppercase">Urgent</h3>
+              <h3 className="font-bold text-lg tracking-wide uppercase">
+                Urgent
+              </h3>
               {methodBadge}
             </div>
-            <p className="font-medium text-yellow-700">Patient requires prompt medical attention.</p>
+            <p className="font-medium text-yellow-700">
+              Patient requires prompt medical attention.
+            </p>
           </div>
         </div>
       );
@@ -168,10 +238,14 @@ const handleEvaluate = async () => {
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-bold text-sm tracking-wide uppercase text-green-700">Normal</h3>
+              <h3 className="font-bold text-sm tracking-wide uppercase text-green-700">
+                Normal
+              </h3>
               {methodBadge}
             </div>
-            <p className="text-sm text-green-600 font-medium">Vitals appear stable.</p>
+            <p className="text-sm text-green-600 font-medium">
+              Vitals appear stable.
+            </p>
           </div>
         </div>
       );
@@ -192,7 +266,9 @@ const handleEvaluate = async () => {
             <ArrowLeft size={16} />
             Back to Queue
           </button>
-          <h2 className="text-xl font-bold text-slate-800">Triage Assessment</h2>
+          <h2 className="text-xl font-bold text-slate-800">
+            Triage Assessment
+          </h2>
         </div>
 
         {/* Dynamic Alert Banner */}
@@ -206,10 +282,23 @@ const handleEvaluate = async () => {
         )}
 
         {/* Patient Information Section (Read Only) */}
-        <div className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-colors duration-300 ${triageStatus === "emergency" ? "border-red-300 shadow-red-100" : "border-slate-200"}`}>
-          <div className={`border-b px-6 py-4 flex items-center gap-2 transition-colors duration-300 ${triageStatus === "emergency" ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-200"}`}>
-            <User className={triageStatus === "emergency" ? "text-red-500" : "text-blue-500"} size={20} />
-            <h3 className={`font-semibold ${triageStatus === "emergency" ? "text-red-900" : "text-slate-800"}`}>Patient Information</h3>
+        <div
+          className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-colors duration-300 ${triageStatus === "emergency" ? "border-red-300 shadow-red-100" : "border-slate-200"}`}
+        >
+          <div
+            className={`border-b px-6 py-4 flex items-center gap-2 transition-colors duration-300 ${triageStatus === "emergency" ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-200"}`}
+          >
+            <User
+              className={
+                triageStatus === "emergency" ? "text-red-500" : "text-blue-500"
+              }
+              size={20}
+            />
+            <h3
+              className={`font-semibold ${triageStatus === "emergency" ? "text-red-900" : "text-slate-800"}`}
+            >
+              Patient Information
+            </h3>
           </div>
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -218,17 +307,23 @@ const handleEvaluate = async () => {
                 <p className="font-semibold text-slate-800">{patient.name}</p>
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-500 mb-1">Patient ID</p>
+                <p className="text-sm font-medium text-slate-500 mb-1">
+                  Patient ID
+                </p>
                 <p className="font-mono text-slate-800">{patient.id}</p>
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-500 mb-1">Age / Gender</p>
+                <p className="text-sm font-medium text-slate-500 mb-1">
+                  Age / Gender
+                </p>
                 <p className="font-medium text-slate-800">
                   {patient.age} / {patient.gender}
                 </p>
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-500 mb-1">Time of Arrival</p>
+                <p className="text-sm font-medium text-slate-500 mb-1">
+                  Time of Arrival
+                </p>
                 <p className="font-medium text-slate-800 flex items-center gap-1">
                   <Clock size={14} className="text-slate-400" />
                   {patient.arrivalTime}
@@ -236,8 +331,12 @@ const handleEvaluate = async () => {
               </div>
               {patient.contact && (
                 <div className="lg:col-span-2">
-                  <p className="text-sm font-medium text-slate-500 mb-1">Contact</p>
-                  <p className="font-medium text-slate-800">{patient.contact}</p>
+                  <p className="text-sm font-medium text-slate-500 mb-1">
+                    Contact
+                  </p>
+                  <p className="font-medium text-slate-800">
+                    {patient.contact}
+                  </p>
                 </div>
               )}
             </div>
@@ -245,14 +344,19 @@ const handleEvaluate = async () => {
         </div>
 
         {/* Vitals Form */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
+        >
           <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Activity className="text-emerald-500" size={20} />
-              <h3 className="font-semibold text-slate-800">Vital Signs Parameters</h3>
+              <h3 className="font-semibold text-slate-800">
+                Vital Signs Parameters
+              </h3>
             </div>
           </div>
-          
+
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div>
@@ -330,7 +434,8 @@ const handleEvaluate = async () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  SpO2 (%) <span className="text-slate-400 font-normal">(optional)</span>
+                  SpO2 (%){" "}
+                  <span className="text-slate-400 font-normal">(optional)</span>
                 </label>
                 <input
                   type="number"
@@ -409,10 +514,20 @@ const handleEvaluate = async () => {
 
             <button
               type="submit"
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              disabled={isSaving}
+              className={`w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors ${isSaving ? "opacity-50 cursor-not-allowed" : ""}`}
             >
-              <CheckCircle size={18} />
-              Complete Triage
+              {isSaving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={18} />
+                  Complete Triage
+                </>
+              )}
             </button>
           </div>
         </form>

@@ -6,19 +6,22 @@ import { useAuth } from "../contexts/AuthContext";
  */
 export function useUserProfile() {
   const { user } = useAuth();
-  const meta = user?.user_metadata || {};
+  const meta = user?.user_metadata || user?.app_metadata || {};
   const displayName =
     meta.display_name || meta.name || user?.email?.split("@")[0] || "User";
   const role =
     meta.role === "record_officer"
       ? "Record Officer"
       : meta.role
-        ? String(meta.role)[0].toUpperCase() + String(meta.role).slice(1).replace("_", " ")
+        ? String(meta.role)[0].toUpperCase() +
+          String(meta.role).slice(1).replace("_", " ")
         : "User";
   return {
     name: displayName,
     role,
     email: user?.email,
-    avatar: user?.user_metadata?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random`,
+    avatar:
+      user?.user_metadata?.avatar ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random`,
   };
 }

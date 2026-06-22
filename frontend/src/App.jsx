@@ -8,7 +8,9 @@ import {
   Navigate,
   Outlet,
   useLocation,
+  useNavigate,
 } from "react-router-dom";
+import { useEffect } from "react";
 import { LoginPage } from "./pages/Authentication/LoginPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Dashboard from "./pages/Admin/Dashboard";
@@ -16,6 +18,7 @@ import Layout from "./components/Layouts/AdminLayout";
 import DoctorsLayout from "./components/Layouts/DoctorsLayout";
 import DoctorsDashboard from "./pages/Doctor/DoctorsDashboard";
 import PatientsQueue from "./pages/Doctor/PatientsQueue";
+import NurseQueueAwareness from "./pages/Doctor/NurseQueueAwareness";
 import RecordingSession from "./pages/Doctor/RecordingSession";
 import Soap from "./pages/Doctor/Soap";
 import Home from "./pages/Home";
@@ -28,7 +31,10 @@ import { Help } from "./pages/Admin/Help";
 import NurseLayout from "./components/Layouts/NurseLayout";
 import { NurseDashboard } from "./pages/Nurse/NurseDashboard";
 import NurseTriage from "./pages/Nurse/NurseTriage";
+import TriageQueue from "./pages/Nurse/TriageQueue";
+import TriageRecords from "./pages/Nurse/TriageRecords";
 import { NurseHelp } from "./pages/Nurse/Help";
+import RecordOfficerRecords from "./pages/RecordOfficers/Records";
 import RecordOfficerLayout from "./components/Layouts/RecordOfficerLayout";
 import RecordOfficerHelp from "./pages/RecordOfficers/RecordOfficerHelp";
 import RecordOfficerDashboard from "./pages/RecordOfficers/Dashboard";
@@ -38,11 +44,46 @@ const getRoleBasedRoute = (role) => {
   const roleRoutes = {
     admin: "/dashboard",
     nurse: "/nurse-dashboard",
-    // record_officer: "/record-officer",
+    record_officer: "/record-officer",
     doctor: "/doctors-dashboard",
   };
-  return roleRoutes[role] || "/";
+  return roleRoutes[role] || null;
 };
+
+const getUserRole = (user) =>
+  user?.user_metadata?.role || user?.app_metadata?.role || user?.role || null;
+
+const UnknownRoleRedirect = () => {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    (async () => {
+      await signOut();
+      if (isMounted) {
+        navigate("/login", { replace: true });
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [signOut, navigate]);
+
+  return (
+    <div className="h-screen w-full flex items-center justify-center">
+      <div className="text-center text-gray-700">
+        <p className="text-lg font-semibold">
+          Your account role is not set yet.
+        </p>
+        <p className="text-sm mt-2">Redirecting you to sign in again...</p>
+      </div>
+    </div>
+  );
+};
+
 function App() {
   const ProtectedRoute = () => {
     const { user, loading } = useAuth();
@@ -58,7 +99,11 @@ function App() {
     if (!user) return <Navigate to="/login" replace />;
 
     // if the authenticated user does not have the admin role, redirect
-    const role = user.user_metadata?.role || user.role;
+    const role = getUserRole(user);
+    if (!role) {
+      return <UnknownRoleRedirect />;
+    }
+
     if (role && role !== "admin") {
       let dest = "/dashboard"; // fallback
       if (role === "nurse") dest = "/nurse-dashboard";
@@ -85,11 +130,19 @@ function App() {
         </div>
       );
 
-    const userRole = user?.user_metadata?.role;
+    const userRole = getUserRole(user);
+
+    if (!userRole) {
+      return <UnknownRoleRedirect />;
+    }
 
     if (!allowedRoles.includes(userRole)) {
       const redirectUrl = getRoleBasedRoute(userRole);
-      return <Navigate to={redirectUrl} replace />;
+      return redirectUrl ? (
+        <Navigate to={redirectUrl} replace />
+      ) : (
+        <UnknownRoleRedirect />
+      );
     }
 
     return children;
@@ -100,9 +153,16 @@ function App() {
 
     if (loading) return null;
     if (user) {
-      const role = user?.user_metadata?.role || user?.role;
+      const role = getUserRole(user);
+      if (!role) {
+        return <UnknownRoleRedirect />;
+      }
       const redirectUrl = getRoleBasedRoute(role);
-      return <Navigate to={redirectUrl} replace />;
+      return redirectUrl ? (
+        <Navigate to={redirectUrl} replace />
+      ) : (
+        <UnknownRoleRedirect />
+      );
     }
 
     return children;
@@ -150,6 +210,9 @@ function App() {
               }
             >
               <Route index element={<NurseDashboard />} />
+              <Route path="triage-queue" element={<TriageQueue />} />
+              <Route path="triage-results" element={<TriageRecords />} />
+              <Route path="records" element={<RecordOfficerRecords />} />
               <Route path="triage/:patientId" element={<NurseTriage />} />
               <Route path="help" element={<NurseHelp />} />
             </Route>
@@ -164,7 +227,11 @@ function App() {
               }
             >
               <Route index element={<RecordOfficerDashboard />} />
-              <Route path="/record-officer/help" element={<RecordOfficerHelp />} />
+              <Route path="records" element={<RecordOfficerRecords />} />
+              <Route
+                path="/record-officer/help"
+                element={<RecordOfficerHelp />}
+              />
             </Route>
             <Route
               path="/doctors-dashboard"
@@ -175,18 +242,15 @@ function App() {
               }
             >
               <Route index element={<DoctorsDashboard />} />
+              <Route path="records" element={<RecordOfficerRecords />} />
+              <Route path="patients_queue" element={<PatientsQueue />} />
+              <Route path="nurse-queue" element={<NurseQueueAwareness />} />
+              {/* Nurse triage results view removed for doctors */}
               <Route
-                path="/doctors-dashboard/patients_queue"
-                element={<PatientsQueue />}
-              />
-              <Route
-                path="/doctors-dashboard/recording-session/:patientId/:sessionId"
+                path="recording-session/:patientId/:sessionId"
                 element={<RecordingSession />}
               />
-              <Route
-                path="/doctors-dashboard/soap/:patientId/:sessionId"
-                element={<Soap />}
-              />
+              <Route path="soap/:patientId/:sessionId" element={<Soap />} />
               <Route
                 path="*"
                 element={<Navigate to="/doctors-dashboard" replace />}

@@ -1,10 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Activity,
   CheckCircle2,
   Clock3,
   ClipboardCheck,
   UsersRound,
+  ArrowRight,
+  AlertCircle,
+  Stethoscope,
+  ClipboardList,
 } from "lucide-react";
 import WelcomeBanner from "../../components/WelcomeBanner";
 import { useUserProfile } from "../../hooks/useUserProfile";
@@ -49,28 +54,19 @@ const DoctorsDashboard = () => {
     const loadDoctorStats = async () => {
       setLoading(true);
       setError("");
-      setStats({
-          totalPatientsToday: 6,
-          awaitingTriage: 2,
-          awaitingConsultation: 2,
-          visitsEnded: 2,
-        });
 
       try {
         const data = await api.get("/doctor/stats");
         if (!mounted) return;
         setStats(normalizeStats(data));
-      } catch (_) {
+      } catch (err) {
         if (!mounted) return;
-        setError(
-          "Doctor stats service is unavailable. Showing default values.",
-        );
-        // Keep fallback aligned with current dummy queue in PatientsQueue
+        setError("Doctor dashboard data is unavailable right now.");
         setStats({
-          totalPatientsToday: 6,
-          awaitingTriage: 2,
-          awaitingConsultation: 2,
-          visitsEnded: 2,
+          totalPatientsToday: 0,
+          awaitingTriage: 0,
+          awaitingConsultation: 0,
+          visitsEnded: 0,
         });
       } finally {
         if (mounted) setLoading(false);
@@ -115,30 +111,38 @@ const DoctorsDashboard = () => {
   );
 
   return (
-    <div className="transition-all duration-300 p-4 overflow-auto w-full">
+    <div className="transition-all duration-300 p-4 md:p-6 overflow-auto w-full bg-gray-50/50">
       <header className="mb-8">
         <WelcomeBanner user={userProfile} />
-        <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
-          <Activity className="text-blue-600" />
-          Doctor Dashboard
-        </h1>
-        <p className="text-gray-500 mt-1">
-          Welcome Dr. {userProfile?.name || "Doctor"}, here is your patient
-          queue overview.
-        </p>
+        <div className="flex items-center gap-3 mt-6">
+          <div className="p-3 bg-blue-50 rounded-xl">
+            <Activity className="text-blue-600" size={32} />
+          </div>
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
+              Doctor Dashboard
+            </h1>
+            <p className="text-gray-600 mt-1">
+              Welcome Dr. {userProfile?.name || "Doctor"}, here is your patient
+              queue overview.
+            </p>
+          </div>
+        </div>
       </header>
 
-      {/* {error ? (
-        <div className="mb-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
-          {error}
+      {error ? (
+        <div className="alert alert-warning mb-6">
+          <AlertCircle size={20} className="shrink-0" />
+          <div>
+            <p className="font-semibold">Warning</p>
+            <p className="text-sm">{error}</p>
+          </div>
         </div>
-      ) : null} */}
+      ) : null}
 
-      <section className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">
-          Today's Overview
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+      <section className="mb-8">
+        <h2 className="section-title">Today's Overview</h2>
+        <div className="grid-responsive">
           {cards.map((card) => (
             <StatCard
               key={card.title}
@@ -150,27 +154,73 @@ const DoctorsDashboard = () => {
           ))}
         </div>
       </section>
+
+      <section className="mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <QuickActionCard
+            title="Patients Queue"
+            description="See consultation-ready patients and start exams"
+            icon={<Stethoscope size={24} />}
+            color="bg-blue-500"
+            href="/doctors-dashboard/patients_queue"
+          />
+          <QuickActionCard
+            title="Nurse Triage Queue"
+            description="Monitor the live nurse queue for awareness"
+            icon={<ClipboardList size={24} />}
+            color="bg-amber-500"
+            href="/doctors-dashboard/nurse-queue"
+          />
+          {/* Triage Results removed from doctors dashboard per request */}
+        </div>
+      </section>
     </div>
   );
 };
 
 const StatCard = ({ title, count, icon, color }) => (
-  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 relative overflow-hidden group">
-    <div
-      className={`absolute right-0 top-0 w-24 h-24 transform translate-x-8 -translate-y-8 rounded-full opacity-10 ${color}`}
-    />
-    <div className="relative z-10 flex justify-between items-start">
-      <div>
-        <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
-          {title}
-        </p>
-        <h3 className="text-3xl font-bold text-gray-900 mt-2">{count}</h3>
-      </div>
-      <div className={`p-3 rounded-lg text-white shadow-lg ${color}`}>
+  <div className="stat-card">
+    <div className="flex items-center gap-3">
+      <div
+        className="stat-card-icon"
+        style={{ background: color + "20", color }}
+      >
         {icon}
+      </div>
+      <div className="flex-1">
+        <p className="stat-card-label">{title}</p>
+        <p className="stat-card-value">{count}</p>
       </div>
     </div>
   </div>
+);
+
+const QuickActionCard = ({ title, description, icon, color, href }) => (
+  <Link
+    to={href}
+    className="group card elevated p-6 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+  >
+    <div className="flex items-start justify-between">
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+          {title}
+        </h3>
+        <p className="text-gray-600 text-sm mt-1">{description}</p>
+      </div>
+      <div
+        className={`p-3 rounded-lg text-white ${color} group-hover:shadow-lg transition-all`}
+      >
+        {icon}
+      </div>
+    </div>
+    <div className="mt-4 flex items-center gap-2 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+      <span className="text-sm font-semibold">Go to page</span>
+      <ArrowRight
+        size={16}
+        className="group-hover:translate-x-1 transition-transform"
+      />
+    </div>
+  </Link>
 );
 
 export default DoctorsDashboard;
