@@ -1,3 +1,4 @@
+version: "3.9"
 services:
   db:
     image: postgres:16-alpine
@@ -9,28 +10,34 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
 
   ai_engine:
     build:
       context: ./ai_engine
+    env_file:
+      - .env
     environment:
       openai_key: ${AI_ENGINE_TOKEN:-openai_key}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       HF_TOKEN: ${HF_TOKEN:-}
-      ALLOWED_ORIGINS: http://localhost:8000,http://backend:8000
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8000,http://backend:8000,http://frontend:5173}
     ports:
       - "8001:8001"
     volumes:
       - ai_engine_cache:/root/.cache
+    restart: unless-stopped
 
   backend:
     build:
       context: ./backend
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql+psycopg2://cliniq:cliniq@db:5432/cliniqflow
-      AI_ENGINE_URL: http://ai_engine:8001
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://cliniq:cliniq@db:5432/cliniqflow}
+      AI_ENGINE_URL: ${AI_ENGINE_URL:-http://ai_engine:8001}
       AI_ENGINE_TOKEN: ${AI_ENGINE_TOKEN:-openai_key}
-      CORS_ORIGINS: http://localhost:5173
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://frontend:5173}
       CLINIQ_DEV_BYPASS_AUTH: "true"
       SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-dev-insecure-change-me}
@@ -40,19 +47,25 @@ services:
       - ai_engine
     ports:
       - "8000:8000"
+    restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
+    env_file:
+      - .env
     environment:
-      VITE_API_URL: http://localhost:8000
+      VITE_API_URL: ${VITE_API_URL:-http://backend:8000}
       VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://example.supabase.co}
       VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-dev-insecure-change-me}
     depends_on:
       - backend
     ports:
       - "5173:5173"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local
   ai_engine_cache:
+    driver: local
