@@ -72,11 +72,8 @@ const RecordingSession = () => {
   const mediaStreamRef = useRef(null);
   const chunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
-  const chunkQueueRef = useRef([]);
-  const chunkIndexRef = useRef(0);
-  const isUploadingChunkRef = useRef(false);
-  const retryTimerRef = useRef(null);
-  const aiUnavailableNotifiedRef = useRef(false);
+  const finalDurationRef = useRef(0);
+
 
   const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -179,34 +176,112 @@ const RecordingSession = () => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
       chunksRef.current = [];
-      chunkQueueRef.current = [];
-      chunkIndexRef.current = 0;
-      setInterimText("Whisper AI is transcribing in near real-time...");
-
+      finalDurationRef.current = 0;
+      setInterimText("");
+  
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
 
-      recorder.ondataavailable = async (event) => {
+      recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
           chunksRef.current.push(event.data);
-          chunkQueueRef.current.push({
-            blob: event.data,
-            chunkIndex: chunkIndexRef.current++,
-          });
-          await processChunkQueue();
+         
         }
       };
 
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+
         if (blob.size > 0) {
-          const localAudioUrl = URL.createObjectURL(blob);
-          setAudioUrl(localAudioUrl);
+          setAudioUrl(URL.createObjectURL(blob));
+        }
+
+        if (!blob.size) {
+          setInterimText("");
+          stopTracks();
+          return;
+        }
+
+        setIsTranscribing(true);
+        setInterimText("Transcribing full consultation audio...");
+
+        try {
+          const token = await getToken();
+          if (!token) throw new Error("Please sign in to transcribe audio");
+
+          const formData = new FormData();
+          formData.append("file", blob, "consultation.webm");
+
+          const res = await fetch(
+            `${apiUrl}/consultation/session/${activeSessionId}/transcribe`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+              body: formData,
+            },
+          );
+
+          const text = await res.text();
+          let response = {};
+          try {
+            response = text ? JSON.parse(text) : {};
+          } catch {
+            response = {};
+          }
+
+          if (!res.ok) {
+            const msg =
+              response?.error?.message ||
+              response?.detail ||
+              `Whisper transcription failed (${res.status})`;
+            throw new Error(msg);
+          }
+
+          if (response.segments && response.segments.length > 0) {
+            const aiSegments = response.segments
+              .map((seg, idx) => ({
+                id: `ai-full-${idx}-${Date.now()}`,
+                text: seg.translation || seg.text || "",
+                speaker: seg.speaker || "SPEAKER_00",
+                start: seg.start,
+                end: seg.end,
+                confidence: 0.98,
+                source: "ai-whisper",
+              }))
+              .filter((m) => m.text && m.text.trim());
+
+            if (aiSegments.length) {
+              setMessages(aiSegments);
+            }
+          } else if (response.transcript?.trim()) {
+            setMessages([
+              {
+                id: `ai-full-${Date.now()}`,
+                text: response.transcript,
+                speaker: "SPEAKER_00",
+                confidence: 0.98,
+                source: "ai-whisper",
+              },
+            ]);
+          }
+        } catch (err) {
+          const errMsg =
+            err?.message ||
+            err?.response?.error?.message ||
+            err?.response?.detail ||
+            "Failed to transcribe audio";
+          setError(errMsg);
+          toast.error(errMsg);
+        } finally {
+          setIsTranscribing(false);
+          setInterimText("");
+          stopTracks();
         }
       };
 
-      // 4s chunked recording for near-live Whisper transcription.
-      recorder.start(4000);
+      recorder.start();
 
       setIsRecording(true);
     } catch (err) {
@@ -214,128 +289,9 @@ const RecordingSession = () => {
         err?.message ||
           "Unable to access microphone. Please allow mic permission and try again.",
       );
+      stopTracks();
     } finally {
       setIsStarting(false);
-    }
-  };
-
-  const processChunkQueue = async () => {
-    if (isUploadingChunkRef.current) return;
-    if (!activeSessionId) {
-      setError("Session ID missing");
-      return;
-    }
-
-    if (!chunkQueueRef.current.length) return;
-
-    isUploadingChunkRef.current = true;
-    setIsTranscribing(true);
-
-    try {
-      while (chunkQueueRef.current.length > 0) {
-        const currentChunk = chunkQueueRef.current.shift();
-        const { blob, chunkIndex } = currentChunk;
-        const token = await getToken();
-        if (!token) throw new Error("Please sign in to transcribe audio");
-
-        const formData = new FormData();
-        formData.append("file", blob, `recording-${chunkIndex}.webm`);
-
-        const res = await fetch(
-          `${apiUrl}/consultation/session/${activeSessionId}/transcribe`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: formData,
-          },
-        );
-
-        const text = await res.text();
-        let response = {};
-        try {
-          response = text ? JSON.parse(text) : {};
-        } catch {
-          response = {};
-        }
-
-        if (!res.ok) {
-          const msg =
-            response?.error?.message ||
-            response?.detail ||
-            `Whisper transcription failed (${res.status})`;
-
-          // If AI is warming up/unavailable, put chunk back and retry later.
-          if (res.status === 503 || msg.toLowerCase().includes("unavailable")) {
-            chunkQueueRef.current.unshift(currentChunk);
-            setInterimText("Whisper AI is warming up… retrying queued audio chunks.");
-            if (!aiUnavailableNotifiedRef.current) {
-              toast.info("Whisper service is warming up. Audio chunks will retry automatically.");
-              aiUnavailableNotifiedRef.current = true;
-            }
-            break;
-          }
-
-          throw new Error(msg);
-        }
-
-        // Clear warm-up state once we get a successful chunk response.
-        aiUnavailableNotifiedRef.current = false;
-        if (interimText) {
-          setInterimText("");
-        }
-
-        if (response.segments && response.segments.length > 0) {
-          const aiSegments = response.segments
-            .map((seg, idx) => ({
-              id: `ai-${chunkIndex}-${idx}-${Date.now()}`,
-              text: seg.translation || seg.text || "",
-              speaker: seg.speaker || "SPEAKER_00",
-              start: seg.start,
-              end: seg.end,
-              confidence: 0.98,
-              source: "ai-whisper",
-            }))
-            .filter((m) => m.text && m.text.trim());
-
-          if (aiSegments.length) {
-            setMessages((prev) => [...prev, ...aiSegments]);
-          }
-        } else if (response.transcript?.trim()) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `ai-${chunkIndex}-${Date.now()}`,
-              text: response.transcript,
-              speaker: "SPEAKER_00",
-              confidence: 0.98,
-              source: "ai-whisper",
-            },
-          ]);
-        }
-      }
-    } catch (err) {
-      const errMsg =
-        err?.message ||
-        err?.response?.error?.message ||
-        err?.response?.detail ||
-        "Failed to transcribe audio";
-      setError(errMsg);
-      toast.error(errMsg);
-    } finally {
-      isUploadingChunkRef.current = false;
-      setIsTranscribing(false);
-
-      // Schedule retry if chunks remain (e.g., AI temporarily unavailable).
-      if (chunkQueueRef.current.length > 0) {
-        if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-        retryTimerRef.current = setTimeout(() => {
-          processChunkQueue();
-        }, 5000);
-      } else if (!isRecording) {
-        setInterimText("");
-      }
     }
   };
 
@@ -347,18 +303,13 @@ const RecordingSession = () => {
       mediaRecorderRef.current.stop();
     }
 
-    stopTracks();
+    finalDurationRef.current = recordingDuration;
     setIsRecording(false);
-    if (!isUploadingChunkRef.current) {
-      setInterimText("");
-    }
   };
 
   useEffect(() => {
     return () => {
-      if (retryTimerRef.current) {
-        clearTimeout(retryTimerRef.current);
-      }
+      stopTracks();
     };
   }, []);
 
@@ -374,7 +325,7 @@ const RecordingSession = () => {
       await api.post(`/consultation/session/${activeSessionId}/end`, {
         transcript: messages.map((m) => m.text).join("\n"),
         transcript_segments: messages,
-        duration_seconds: recordingDuration,
+        duration_seconds: finalDurationRef.current || recordingDuration,
       });
 
       // End the visit in the main system
@@ -521,7 +472,7 @@ const RecordingSession = () => {
         <div className="h-96 overflow-y-auto rounded-lg border border-gray-200 p-4 bg-gray-50 space-y-3">
           {messages.length === 0 && !interimText ? (
             <div className="text-sm text-gray-500 italic">
-              Transcript will appear here from Whisper AI as recording chunks are processed.
+              Transcript will appear here after you stop recording.
             </div>
           ) : null}
 
