@@ -16,7 +16,7 @@ services:
     build:
       context: ./ai_engine
     env_file:
-      - .env
+      - ./ai_engine/.env
     environment:
       openai_key: ${AI_ENGINE_TOKEN:-openai_key}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -32,7 +32,7 @@ services:
     build:
       context: ./backend
     env_file:
-      - .env
+      - ./backend/.env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://cliniq:cliniq@db:5432/cliniqflow}
       AI_ENGINE_URL: ${AI_ENGINE_URL:-http://ai_engine:8001}
@@ -53,7 +53,7 @@ services:
     build:
       context: ./frontend
     env_file:
-      - .env
+      - ./frontend/.env
     environment:
       VITE_API_URL: ${VITE_API_URL:-http://backend:8000}
       VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://example.supabase.co}
