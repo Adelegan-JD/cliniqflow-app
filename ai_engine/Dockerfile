@@ -51,18 +51,19 @@ WORKDIR /app
 
 RUN printf '%s\n' \
   'Types: deb' \
-  'URIs: https://cloudflaremirrors.com/debian' \
+  'URIs: http://mirrors.edge.kernel.org/debian' \
   'Suites: bookworm bookworm-updates' \
   'Components: main' \
   'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
   '' \
   'Types: deb' \
-  'URIs: https://cloudflaremirrors.com/debian-security' \
+  'URIs: http://mirrors.edge.kernel.org/debian-security' \
   'Suites: bookworm-security' \
   'Components: main' \
   'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
   > /etc/apt/sources.list.d/debian.sources
   
+
 # Run update and install system packages
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
