@@ -1,16 +1,16 @@
-version: "3.9"
+
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: cliniq
-      POSTGRES_PASSWORD: cliniq
-      POSTGRES_DB: cliniqflow
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
+#   db:
+#     image: postgres:16-alpine
+#     environment:
+#       POSTGRES_USER: cliniq
+#       POSTGRES_PASSWORD: cliniq
+#       POSTGRES_DB: cliniqflow
+#     ports:
+#       - "5432:5432"
+#     volumes:
+#       - postgres_data:/var/lib/postgresql/data
+#     restart: unless-stopped
 
   ai_engine:
     build:
@@ -49,20 +49,20 @@ services:
       - "8000:8000"
     restart: unless-stopped
 
-  frontend:
-    build:
-      context: ./frontend
-    env_file:
-      - ./frontend/.env
-    environment:
-      VITE_API_URL: ${VITE_API_URL:-http://backend:8000}
-      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://example.supabase.co}
-      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-dev-insecure-change-me}
-    depends_on:
-      - backend
-    ports:
-      - "5173:5173"
-    restart: unless-stopped
+  # frontend:
+    # build:
+    #   context: ./frontend
+    # env_file:
+    #   - ./frontend/.env
+    # environment:
+    #   VITE_API_URL: ${VITE_API_URL:-http://backend:8000}
+    #   VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://example.supabase.co}
+    #   VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-dev-insecure-change-me}
+    # depends_on:
+    #   - backend
+    # ports:
+    #   - "5173:5173"
+    # restart: unless-stopped
 
 volumes:
   postgres_data:
