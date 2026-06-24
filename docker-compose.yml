@@ -1,32 +1,87 @@
 
-services:
-#   db:
-#     image: postgres:16-alpine
+# services:
+# #   db:
+# #     image: postgres:16-alpine
+# #     environment:
+# #       POSTGRES_USER: cliniq
+# #       POSTGRES_PASSWORD: cliniq
+# #       POSTGRES_DB: cliniqflow
+# #     ports:
+# #       - "5432:5432"
+# #     volumes:
+# #       - postgres_data:/var/lib/postgresql/data
+# #     restart: unless-stopped
+
+#   ai_engine:
+#     build:
+#       context: ./ai_engine
+#       dockerfile: Dockerfile
+#     env_file:
+#       - ./ai_engine/.env
 #     environment:
-#       POSTGRES_USER: cliniq
-#       POSTGRES_PASSWORD: cliniq
-#       POSTGRES_DB: cliniqflow
+#       openai_key: ${AI_ENGINE_TOKEN:-openai_key}
+#       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+#       HF_TOKEN: ${HF_TOKEN:-}
+#       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8000,http://backend:8000,http://frontend:5173}
 #     ports:
-#       - "5432:5432"
+#       - "8001:8001"
 #     volumes:
-#       - postgres_data:/var/lib/postgresql/data
+#       - ai_engine_cache:/root/.cache
 #     restart: unless-stopped
 
+#   backend:
+#     build:
+#       context: ./backend
+#       dockerfile: Dockerfile
+#     env_file:
+#       - ./backend/.env
+#     environment:
+#       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://cliniq:cliniq@db:5432/cliniqflow}
+#       AI_ENGINE_URL: ${AI_ENGINE_URL:-http://ai_engine:8001}
+#       AI_ENGINE_TOKEN: ${AI_ENGINE_TOKEN:-openai_key}
+#       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://frontend:5173}
+#       CLINIQ_DEV_BYPASS_AUTH: "true"
+#       SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
+#       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-dev-insecure-change-me}
+#       SUPABASE_JWT_VERIFY_AUD: "true"
+#     depends_on:
+#       # - db
+#       - ai_engine
+#     ports:
+#       - "8000:8000"
+#     restart: unless-stopped
+
+#   # frontend:
+#     # build:
+#     #   context: ./frontend
+#     # env_file:
+#     #   - ./frontend/.env
+#     # environment:
+#     #   VITE_API_URL: ${VITE_API_URL:-http://backend:8000}
+#     #   VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://example.supabase.co}
+#     #   VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-dev-insecure-change-me}
+#     # depends_on:
+#     #   - backend
+#     # ports:
+#     #   - "5173:5173"
+#     # restart: unless-stopped
+
+# volumes:
+#   # postgres_data:
+#   #   driver: local
+#   ai_engine_cache:
+#     driver: local
+
+
+services:
   ai_engine:
     build:
       context: ./ai_engine
       dockerfile: Dockerfile
     env_file:
       - ./ai_engine/.env
-    environment:
-      openai_key: ${AI_ENGINE_TOKEN:-openai_key}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      HF_TOKEN: ${HF_TOKEN:-}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8000,http://backend:8000,http://frontend:5173}
     ports:
       - "8001:8001"
-    volumes:
-      - ai_engine_cache:/root/.cache
     restart: unless-stopped
 
   backend:
@@ -36,38 +91,9 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://cliniq:cliniq@db:5432/cliniqflow}
       AI_ENGINE_URL: ${AI_ENGINE_URL:-http://ai_engine:8001}
-      AI_ENGINE_TOKEN: ${AI_ENGINE_TOKEN:-openai_key}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://frontend:5173}
-      CLINIQ_DEV_BYPASS_AUTH: "true"
-      SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
-      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-dev-insecure-change-me}
-      SUPABASE_JWT_VERIFY_AUD: "true"
     depends_on:
-      # - db
       - ai_engine
     ports:
       - "8000:8000"
     restart: unless-stopped
-
-  # frontend:
-    # build:
-    #   context: ./frontend
-    # env_file:
-    #   - ./frontend/.env
-    # environment:
-    #   VITE_API_URL: ${VITE_API_URL:-http://backend:8000}
-    #   VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://example.supabase.co}
-    #   VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-dev-insecure-change-me}
-    # depends_on:
-    #   - backend
-    # ports:
-    #   - "5173:5173"
-    # restart: unless-stopped
-
-volumes:
-  # postgres_data:
-  #   driver: local
-  ai_engine_cache:
-    driver: local
