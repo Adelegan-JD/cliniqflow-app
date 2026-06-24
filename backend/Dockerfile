@@ -41,8 +41,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
-
+RUN printf '%s\n' \
+  'Types: deb' \
+  'URIs: https://cloudflaremirrors.com/debian' \
+  'Suites: bookworm bookworm-updates' \
+  'Components: main' \
+  'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+  '' \
+  'Types: deb' \
+  'URIs: https://cloudflaremirrors.com/debian-security' \
+  'Suites: bookworm-security' \
+  'Components: main' \
+  'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+  > /etc/apt/sources.list.d/debian.sources
+  
 # Run update and install backend system packages
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
