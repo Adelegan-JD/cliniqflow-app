@@ -39,8 +39,7 @@
 
 
 
-# FROM python:3.11-slim-bookworm
-FROM python
+FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -49,6 +48,8 @@ WORKDIR /app
 
 # Overwrite default mirrors with Cloudflare's secure HTTPS endpoints
 # RUN echo -e "Types: deb\nURIs: https://cloudflaremirrors.com\nSuites: bookworm bookworm-updates\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n\nTypes: deb\nURIs: https://cloudflaremirrors.com-security\nSuites: bookworm-security\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg" > /etc/apt/sources.list.d/debian.sources
+
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
 
 # Run update and install system packages
 RUN apt-get update \
