@@ -45,7 +45,7 @@ services:
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-dev-insecure-change-me}
       SUPABASE_JWT_VERIFY_AUD: "true"
     depends_on:
-      - db
+      # - db
       - ai_engine
     ports:
       - "8000:8000"
@@ -67,7 +67,7 @@ services:
     # restart: unless-stopped
 
 volumes:
-  postgres_data:
-    driver: local
+  # postgres_data:
+  #   driver: local
   ai_engine_cache:
     driver: local
