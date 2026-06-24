@@ -34,7 +34,8 @@
 # CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 
-FROM python:3.11-slim-bookworm
+# FROM python:3.11-slim-bookworm
+  FROM python
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -42,7 +43,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Overwrite default mirrors with Cloudflare's secure HTTPS endpoints
-RUN echo -e "Types: deb\nURIs: https://cloudflaremirrors.com\nSuites: bookworm bookworm-updates\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n\nTypes: deb\nURIs: https://cloudflaremirrors.com-security\nSuites: bookworm-security\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg" > /etc/apt/sources.list.d/debian.sources
+# RUN echo -e "Types: deb\nURIs: https://cloudflaremirrors.com\nSuites: bookworm bookworm-updates\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n\nTypes: deb\nURIs: https://cloudflaremirrors.com-security\nSuites: bookworm-security\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg" > /etc/apt/sources.list.d/debian.sources
 
 # Run update and install backend system packages
 RUN apt-get update \
