@@ -31,11 +31,12 @@ origins = [
 ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://app.cliniq-flow.com"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# "http://localhost:5173", "https://app.cliniq-flow.com" - origins for frontend on localhost and server
 
 app.include_router(health.router)
 app.include_router(admin.router)
