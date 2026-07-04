@@ -26,12 +26,14 @@ app = FastAPI(
 #origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 
 origins = [
-    "http://192.168.18.9:5173",  # Your Vite frontend IP
-    "http://localhost:5173",     # Localhost frontend
+    "https://app.cliniq-flow.com", # Your live production frontend
+    "http://192.168.18.9:5173",    # Your Vite frontend IP
+    "http://localhost:5173",       # Localhost frontend
 ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins= origins or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
