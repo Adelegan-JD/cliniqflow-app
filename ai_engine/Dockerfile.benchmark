@@ -1,0 +1,24 @@
+FROM python:3.11-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DEFAULT_TIMEOUT=600 \
+    PIP_RETRIES=8
+
+WORKDIR /app
+
+# libsndfile is sufficient for the WAV benchmark clips. The production image
+# retains ffmpeg for browser-generated WebM audio.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.benchmark.txt ./
+# CPU-only Torch is sufficient for an offline benchmark and avoids downloading
+# the multi-gigabyte CUDA runtime packages on machines without NVIDIA GPU use.
+RUN pip install --index-url https://download.pytorch.org/whl/cpu torch==2.11.0 \
+    && pip install -r requirements.benchmark.txt
+
+COPY scripts/benchmark_asr.py ./scripts/benchmark_asr.py
+ENTRYPOINT ["python", "scripts/benchmark_asr.py"]

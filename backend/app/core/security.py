@@ -17,6 +17,9 @@ ROLE_ADMIN = "admin"
 ROLE_DOCTOR = "doctor"
 ROLE_NURSE = "nurse"
 ROLE_RECORD_OFFICER = "record_officer"
+ROLE_BILLING_OFFICER = "billing_officer"
+ROLE_PHARMACIST = "pharmacist"
+ROLE_LAB_SCIENTIST = "lab_scientist"
 
 
 @dataclass
@@ -29,17 +32,22 @@ class CurrentUser:
 
 def _normalize_role(raw: str | None) -> str:
     if not raw:
-        return ROLE_NURSE
+        return ""
     s = raw.strip().lower().replace("-", " ")
     s = "_".join(s.split())
     if "record" in s and "officer" in s:
         return ROLE_RECORD_OFFICER
-    if s in (ROLE_ADMIN, ROLE_DOCTOR, ROLE_NURSE, ROLE_RECORD_OFFICER):
+    if s in (ROLE_ADMIN, ROLE_DOCTOR, ROLE_NURSE, ROLE_RECORD_OFFICER, ROLE_BILLING_OFFICER):
         return s
     return s
 
 
 def _decode_supabase_jwt(token: str) -> dict:
+    if not settings.supabase_url:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication is not configured",
+        )
     opts: dict = {"verify_aud": settings.supabase_jwt_verify_aud}
     decode_kwargs: dict = {
         "options": opts,
@@ -58,6 +66,11 @@ def _decode_supabase_jwt(token: str) -> dict:
 
     try:
         if alg.startswith("HS"):
+            if not settings.supabase_jwt_secret:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="HMAC JWT verification is not configured",
+                )
             return jwt.decode(
                 token,
                 settings.supabase_jwt_secret,
@@ -65,25 +78,26 @@ def _decode_supabase_jwt(token: str) -> dict:
                 **decode_kwargs,
             )
 
-        # Try to fetch RS256 signing key from JWKS, but fall back to HS256 if network fails
+        # Asymmetric Supabase tokens are verified only with their JWKS key.
+        # Never fall back to an unrelated HMAC secret after a JWKS failure.
         try:
             signing_key = _supabase_jwks_client().get_signing_key_from_jwt(token).key
-            accepted_algs = [alg] if alg else ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"]
+            accepted_algs = [alg] if alg in {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"} else []
+            if not accepted_algs:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unsupported token algorithm")
             return jwt.decode(
                 token,
                 signing_key,
                 algorithms=accepted_algs,
                 **decode_kwargs,
             )
-        except Exception as jwks_err:
-            # JWKS fetch failed (network issue), fall back to HS256
-            print(f"[AUTH] JWKS fetch failed, falling back to HS256: {jwks_err}")
-            return jwt.decode(
-                token,
-                settings.supabase_jwt_secret,
-                algorithms=["HS256"],
-                **decode_kwargs,
-            )
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication signing keys are temporarily unavailable",
+            ) from None
     except jwt.ExpiredSignatureError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -185,9 +199,11 @@ def get_current_user(
     payload = _decode_supabase_jwt(token)
     sub = str(payload.get("sub") or "")
     email = payload.get("email")
-    meta = payload.get("user_metadata") or {}
     app_meta = payload.get("app_metadata") or {}
-    role_raw = meta.get("role") or app_meta.get("role")
+    # User metadata is editable by the user in Supabase and must never confer
+    # an application privilege. Roles are provisioned by an administrator in
+    # app_metadata and are verified again by every protected endpoint.
+    role_raw = app_meta.get("role")
     role = _normalize_role(str(role_raw) if role_raw else None)
     return CurrentUser(
         id=sub,

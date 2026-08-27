@@ -7,7 +7,7 @@ from pydantic import BaseModel, EmailStr, Field
 from app.core.security import ROLE_ADMIN, CurrentUser, require_roles
 from app.repositories import store
 # Import the admin client you created in the separate file
-from app.core.admin_priv import supabase_admin
+from app.core.admin_priv import require_supabase_admin
 from auth.security import hash_password
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -19,6 +19,7 @@ _ROLE_PREFIXES: dict[str, str] = {
     "record_officer": "REC",
     "pharmacist": "PHA",
     "lab_scientist": "LAB",
+    "billing_officer": "BIL",
 }
 
 
@@ -78,6 +79,7 @@ def invite_user(
     created_auth_user_id: str | None = None
 
     try:
+        supabase_admin = require_supabase_admin()
         # STEP 1: Create user in Supabase Auth (Hidden 'auth' schema)
         # We use email_confirm=True so the admin-created user can log in immediately
         auth_res = supabase_admin.auth.admin.create_user({

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import TriageForm from "../../components/TriageForm";
 import { api } from "../../utils/api";
-import { supabase } from "../../utils/supabaseClient";
 
 const NurseTriage = () => {
   const navigate = useNavigate();
@@ -46,66 +45,15 @@ const NurseTriage = () => {
     };
 
     try {
-      let triagedPatient;
-
-      if (import.meta.env.CLINIQ_AUTH_MODE === "supabase") {
-        let updateData, updateError;
-
-        // Try both column naming variants depending on your schema
-        ({ data: updateData, error: updateError } = await supabase
-          .from("nurse_triage_queue")
-          .update({ status: "triaged", urgency: payload.triageStatus })
-          .eq("patientId", payload.patientId)
-          .select("*")
-          .single());
-
-        if (updateError) {
-          ({ data: updateData, error: updateError } = await supabase
-            .from("nurse_triage_queue")
-            .update({ status: "triaged", urgency: payload.triageStatus })
-            .eq("patient_id", payload.patientId)
-            .select("*")
-            .single());
-        }
-
-        if (updateError) throw updateError;
-
-        const { error: recordError } = await supabase
-          .from("nurse_triage_records")
-          .insert([
-            {
-              patientId: payload.patientId,
-              patient_id: payload.patientId,
-              name: patient.name,
-              age: patient.age,
-              sex: patient.sex,
-              urgencyLevel: payload.triageStatus,
-              vitals,
-              triagedAt: new Date().toISOString(),
-            },
-          ]);
-
-        if (recordError) throw recordError;
-
-        triagedPatient = {
-          ...patient,
-          status: "triaged",
-          urgency: payload.triageStatus,
-          triageStatus: payload.triageStatus,
-          vitals,
-          triagedAt: new Date().toISOString(),
-        };
-      } else {
-        const result = await api.post("/nurse/triage", payload);
-        triagedPatient = {
-          ...patient,
-          status: "triaged",
-          urgency: result.patient?.urgency || payload.urgency_level,
-          triageStatus: payload.urgency_level,
-          vitals,
-          triagedAt: result.record?.triagedAt || new Date().toISOString(),
-        };
-      }
+      const result = await api.post("/nurse/triage", payload);
+      const triagedPatient = {
+        ...patient,
+        status: "triaged",
+        urgency: result.urgencyLevel || payload.urgency_level,
+        triageStatus: result.urgencyLevel || payload.urgency_level,
+        vitals,
+        triagedAt: result.triagedAt || new Date().toISOString(),
+      };
 
       navigate("/nurse-dashboard", {
         state: { triagedPatient },

@@ -1,87 +1,57 @@
-
-# services:
-# #   db:
-# #     image: postgres:16-alpine
-# #     environment:
-# #       POSTGRES_USER: cliniq
-# #       POSTGRES_PASSWORD: cliniq
-# #       POSTGRES_DB: cliniqflow
-# #     ports:
-# #       - "5432:5432"
-# #     volumes:
-# #       - postgres_data:/var/lib/postgresql/data
-# #     restart: unless-stopped
-
-#   ai_engine:
-#     build:
-#       context: ./ai_engine
-#       dockerfile: Dockerfile
-#     env_file:
-#       - ./ai_engine/.env
-#     environment:
-#       openai_key: ${AI_ENGINE_TOKEN:-openai_key}
-#       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-#       HF_TOKEN: ${HF_TOKEN:-}
-#       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8000,http://backend:8000,http://frontend:5173}
-#     ports:
-#       - "8001:8001"
-#     volumes:
-#       - ai_engine_cache:/root/.cache
-#     restart: unless-stopped
-
-#   backend:
-#     build:
-#       context: ./backend
-#       dockerfile: Dockerfile
-#     env_file:
-#       - ./backend/.env
-#     environment:
-#       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://cliniq:cliniq@db:5432/cliniqflow}
-#       AI_ENGINE_URL: ${AI_ENGINE_URL:-http://ai_engine:8001}
-#       AI_ENGINE_TOKEN: ${AI_ENGINE_TOKEN:-openai_key}
-#       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://frontend:5173}
-#       CLINIQ_DEV_BYPASS_AUTH: "true"
-#       SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
-#       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-dev-insecure-change-me}
-#       SUPABASE_JWT_VERIFY_AUD: "true"
-#     depends_on:
-#       # - db
-#       - ai_engine
-#     ports:
-#       - "8000:8000"
-#     restart: unless-stopped
-
-#   # frontend:
-#     # build:
-#     #   context: ./frontend
-#     # env_file:
-#     #   - ./frontend/.env
-#     # environment:
-#     #   VITE_API_URL: ${VITE_API_URL:-http://backend:8000}
-#     #   VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://example.supabase.co}
-#     #   VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-dev-insecure-change-me}
-#     # depends_on:
-#     #   - backend
-#     # ports:
-#     #   - "5173:5173"
-#     # restart: unless-stopped
-
-# volumes:
-#   # postgres_data:
-#   #   driver: local
-#   ai_engine_cache:
-#     driver: local
-
-
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:?Set the public HTTPS API URL in the host environment}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:?Set the Supabase project URL in the host environment}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:?Set the Supabase publishable/anon key in the host environment}
+    ports:
+      - "127.0.0.1:8033:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /var/cache/nginx:rw,noexec,nosuid,size=32m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/healthz | grep -q ok"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   ai_engine:
     build:
       context: ./ai_engine
       dockerfile: Dockerfile
     env_file:
       - ./ai_engine/.env
-    ports:
-      - "8011:8001"
+    environment:
+      ASR_MODEL_PATH: /models/yoruba-whisper
+      ASR_OFFLINE_ONLY: "true"
+      ASR_ENABLE_DIARIZATION: "false"
+      ALLOWED_ORIGINS: ""
+    volumes:
+      # Provision the approved offline model on the deployment host before
+      # starting containers. The model is read-only at runtime.
+      - ./models/yoruba-whisper:/models/yoruba-whisper:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=1g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
     restart: unless-stopped
 
   backend:
@@ -91,9 +61,26 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      AI_ENGINE_URL: ${AI_ENGINE_URL:-http://ai_engine:8001}
+      APP_ENVIRONMENT: production
+      AI_ENGINE_URL: http://ai_engine:8001
     depends_on:
-      - ai_engine
+      ai_engine:
+        condition: service_healthy
+    # Publish only to loopback. Put an HTTPS reverse proxy/WAF in front of it;
+    # never expose the AI engine directly.
     ports:
-      - "8022:8000"
+      - "127.0.0.1:8022:8000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped

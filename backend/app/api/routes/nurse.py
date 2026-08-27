@@ -99,7 +99,7 @@ def vitals_urgency(
     `triage_status` field normalized to: emergency | urgent | normal.
     """
     data = ai_engine_client.post_json(
-        "/internal/nlp/vitals-urgency",
+        "/nlp/vitals-urgency",
         body.model_dump(exclude_none=True),
     )
     if isinstance(data, dict):

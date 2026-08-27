@@ -3,9 +3,11 @@ import { Outlet, useLocation } from "react-router-dom";
 import {
   Users,
   LayoutDashboard,
-  Settings,
+  Building2,
   HelpCircle,
   FileText,
+  BadgeDollarSign,
+  ClipboardPenLine,
 } from "lucide-react";
 import { useAdminStore } from "../../store/adminStore";
 import { useUserProfile } from "../../hooks/useUserProfile";
@@ -38,9 +40,21 @@ export default function Layout() {
     },
     {
       id: "settings",
-      label: "Settings",
-      icon: <Settings size={20} />,
+      label: "Hospital Setup",
+      icon: <Building2 size={20} />,
       url: "/dashboard/settings",
+    },
+    {
+      id: "payments",
+      label: "Payment Confirmation",
+      icon: <BadgeDollarSign size={20} />,
+      url: "/dashboard/payments",
+    },
+    {
+      id: "clinical-templates",
+      label: "Clinical Templates",
+      icon: <ClipboardPenLine size={20} />,
+      url: "/dashboard/clinical-templates",
     },
     {
       id: "help",
@@ -60,6 +74,8 @@ export default function Layout() {
     else if (path.startsWith("/dashboard/users")) setActivePage("users");
     else if (path.startsWith("/dashboard/records")) setActivePage("records");
     else if (path.startsWith("/dashboard/settings")) setActivePage("settings");
+    else if (path.startsWith("/dashboard/payments")) setActivePage("payments");
+    else if (path.startsWith("/dashboard/clinical-templates")) setActivePage("clinical-templates");
     else if (path.startsWith("/dashboard/help")) setActivePage("help");
   }, [location.pathname]);
 

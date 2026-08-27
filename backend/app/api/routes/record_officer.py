@@ -67,7 +67,7 @@ def records(
     return rows
 
 
-@router.post("/register-patient")
+@router.post("/register-patient", status_code=201)
 def register_patient(
     body: RegisterPatientBody,
     _user: Annotated[CurrentUser, Depends(require_roles(ROLE_RECORD_OFFICER))],

@@ -185,8 +185,6 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-from openai import OpenAI
-
 from .chunker import split_chunks
 from .loader import load_documents
 from .models import DocumentChunk, LLMAnswer, RetrievalResult
@@ -207,18 +205,15 @@ class RAGEngine:
         top_k: int = 5,
     ):
         self.docs_path = Path(docs_path)
-        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        self.use_embeddings = use_embeddings
+        self.openai_api_key = None
+        self.use_embeddings = False
         self.top_k = top_k
 
         self.documents = load_documents(self.docs_path)
         self.chunks = self._build_chunks(self.documents)
         self.retriever = Retriever(self.chunks, use_embeddings=self.use_embeddings, openai_api_key=self.openai_api_key)
 
-        if self.openai_api_key:
-            self.openai_client = OpenAI(api_key=self.openai_api_key)
-        else:
-            self.openai_client = None
+        self.openai_client = None
 
     def _build_chunks(self, documents: List[DocumentChunk]) -> List[DocumentChunk]:
         """
@@ -237,11 +232,11 @@ class RAGEngine:
         self.chunks = self._build_chunks(self.documents)
         self.retriever = Retriever(self.chunks, use_embeddings=self.use_embeddings, openai_api_key=self.openai_api_key)
 
-    def retrieve(self, query: str) -> List[RetrievalResult]:
+    def retrieve(self, query: str, top_k: Optional[int] = None) -> List[RetrievalResult]:
         """
         Return the top retrieved evidence for a query.
         """
-        return self.retriever.retrieve(query, top_k=self.top_k)
+        return self.retriever.retrieve(query, top_k=top_k or self.top_k)
 
     def answer(self, query: str) -> LLMAnswer:
         """
@@ -259,34 +254,12 @@ class RAGEngine:
                 retrieved_chunks=[],
             )
 
-        if not self.openai_client:
-            return LLMAnswer(
-                query=query,
-                answer="OpenAI API key is not configured. Retrieval succeeded, but no LLM summary was generated.",
-                sources=[result.source for result in results],
-                retrieved_count=len(results),
-                model_used=False,
-                retrieved_chunks=results,
-            )
-
-        prompt = build_prompt(query, results)
-        response = self.openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a safe clinical evidence assistant."},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=500,
-            temperature=0.0,
-        )
-
-        answer_text = response.choices[0].message.content.strip()
         return LLMAnswer(
             query=query,
-            answer=answer_text,
+            answer="Offline retrieval succeeded. Review the cited clinical guidance; no generated summary is provided.",
             sources=[result.source for result in results],
             retrieved_count=len(results),
-            model_used=True,
+            model_used=False,
             retrieved_chunks=results,
         )
 

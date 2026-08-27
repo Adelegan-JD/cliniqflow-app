@@ -3,7 +3,11 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("CLINIQ_DEV_BYPASS_AUTH", "true")
+# Tests must never inherit a developer's or deployment database connection.
+# These values are set before importing the application, which selects the
+# in-memory repository and enables the test-only request headers below.
+os.environ["DATABASE_URL"] = ""
+os.environ["CLINIQ_DEV_BYPASS_AUTH"] = "true"
 
 from app.main import app
 
@@ -46,4 +50,13 @@ def auth_headers_record_officer() -> dict[str, str]:
         "Authorization": "Bearer dev-test-token",
         "X-Debug-Role": "record_officer",
         "X-Debug-User-Id": "test-ro",
+    }
+
+
+@pytest.fixture
+def auth_headers_billing_officer() -> dict[str, str]:
+    return {
+        "Authorization": "Bearer dev-test-token",
+        "X-Debug-Role": "billing_officer",
+        "X-Debug-User-Id": "test-billing",
     }

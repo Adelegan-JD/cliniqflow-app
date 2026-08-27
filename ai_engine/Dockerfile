@@ -83,10 +83,22 @@
 # CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
 
 # Use an official lightweight Python image
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HOME=/home/cliniq
 
 # Set the working directory inside the container
 WORKDIR /app
+
+RUN addgroup --system cliniq && adduser --system --ingroup cliniq --home /home/cliniq cliniq
+
+# librosa needs these to reliably decode browser-generated webm recordings.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file first (for faster rebuilds)
 COPY requirements.txt .
@@ -96,6 +108,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 COPY . .
+
+RUN chown -R cliniq:cliniq /app /home/cliniq
+USER cliniq
 
 # Tell Docker which port this service listens on
 EXPOSE 8001

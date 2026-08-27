@@ -6,3 +6,7 @@ venv/
 .env
 .venv/
 nenv/
+.pnpm-store/
+benchmark_results/
+models/
+SESS-*/

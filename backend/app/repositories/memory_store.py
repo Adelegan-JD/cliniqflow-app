@@ -35,6 +35,22 @@ class MemoryStore:
         self.visits: dict[str, dict[str, Any]] = {}
         self.triage_events: list[dict[str, Any]] = []
         self.examinations: list[dict[str, Any]] = []
+        self.departments: dict[str, dict[str, Any]] = {}
+        self.locations: dict[str, dict[str, Any]] = {}
+        self.beds: dict[str, dict[str, Any]] = {}
+        self.admissions: dict[str, dict[str, Any]] = {}
+        self.bed_assignments: list[dict[str, Any]] = []
+        self.nursing_observations: list[dict[str, Any]] = []
+        self.invoices: dict[str, dict[str, Any]] = {}
+        self.payments: dict[str, dict[str, Any]] = {}
+        self.clinical_form_templates: dict[str, dict[str, Any]] = {}
+        self.clinical_form_responses: list[dict[str, Any]] = []
+        self.clinical_orders: dict[str, dict[str, Any]] = {}
+        self.clinical_order_items: dict[str, dict[str, Any]] = {}
+        self.medication_dispenses: dict[str, dict[str, Any]] = {}
+        self.medication_administrations: list[dict[str, Any]] = []
+        self.discharge_summaries: dict[str, dict[str, Any]] = {}
+        self.dosage_checks: list[dict[str, Any]] = []
         self.users: list[dict[str, Any]] = [
             {
                 "id": "seed-admin-1",
@@ -161,6 +177,24 @@ class MemoryStore:
         out = dict(v)
         out["visit_status"] = normalize_visit_status(out.get("visit_status"))
         return out
+
+    def record_dosage_check(
+        self, visit_id: str | None, requested_by: str | None, request: dict[str, Any], assessment: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        visit = self.get_visit(visit_id or "")
+        if not visit or not requested_by:
+            return None
+        row = {
+            "id": str(uuid.uuid4()), "visit_id": visit_id,
+            "patient_id": visit["patient_id"], "requested_by": requested_by,
+            "request_payload": request, "assessment_payload": assessment,
+            "safety_level": assessment.get("safety_level", "insufficient_data"),
+            "evidence_snapshot": assessment.get("evidence", []),
+            "created_at": _utcnow().isoformat(),
+        }
+        with self._lock:
+            self.dosage_checks.append(row)
+        return row
 
     def list_visits_values(self) -> list[dict[str, Any]]:
         out = []
@@ -552,6 +586,279 @@ class MemoryStore:
         with self._lock:
             self.users.append(row)
         return row
+
+    def list_departments(self) -> list[dict[str, Any]]:
+        return list(self.departments.values())
+
+    def create_department(self, data: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            if any(row["code"].lower() == data["code"].lower() for row in self.departments.values()):
+                raise ValueError("Department code already exists")
+            row = {"id": str(uuid.uuid4()), "is_active": True, "created_at": _utcnow().isoformat(), **data}
+            self.departments[row["id"]] = row
+            return row
+
+    def load_starter_catalogue(self, departments: list[tuple[str, str, str]], locations: list[tuple[str, str, str, str | None]]) -> dict[str, int]:
+        added_departments = 0
+        added_locations = 0
+        with self._lock:
+            for code, name, specialty in departments:
+                if not any(row["code"].lower() == code.lower() for row in self.departments.values()):
+                    department_id = str(uuid.uuid4())
+                    self.departments[department_id] = {"id": department_id, "code": code, "name": name, "specialty": specialty, "is_active": True, "created_at": _utcnow().isoformat()}
+                    added_departments += 1
+            by_code = {row["code"]: row["id"] for row in self.departments.values()}
+            for code, name, location_type, department_code in locations:
+                if not any(row["code"].lower() == code.lower() for row in self.locations.values()):
+                    location_id = str(uuid.uuid4())
+                    self.locations[location_id] = {"id": location_id, "code": code, "name": name, "location_type": location_type, "department_id": by_code.get(department_code), "is_active": True, "created_at": _utcnow().isoformat()}
+                    added_locations += 1
+        return {"departments_added": added_departments, "locations_added": added_locations}
+
+    def list_locations(self) -> list[dict[str, Any]]:
+        return list(self.locations.values())
+
+    def create_location(self, data: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            row = {"id": str(uuid.uuid4()), "is_active": True, "created_at": _utcnow().isoformat(), **data}
+            self.locations[row["id"]] = row
+            return row
+
+    def list_beds(self) -> list[dict[str, Any]]:
+        return list(self.beds.values())
+
+    def create_bed(self, data: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            if data["location_id"] not in self.locations:
+                raise ValueError("Clinical location not found")
+            row = {"id": str(uuid.uuid4()), "status": "available", "created_at": _utcnow().isoformat(), **data}
+            self.beds[row["id"]] = row
+            return row
+
+    def list_admissions(self) -> list[dict[str, Any]]:
+        return sorted(self.admissions.values(), key=lambda row: row["admitted_at"], reverse=True)
+
+    def create_admission(self, data: dict[str, Any], created_by: str | None) -> dict[str, Any] | None:
+        patient = self.get_patient(data["patient_id"])
+        if patient is None:
+            return None
+        with self._lock:
+            admission_id = str(uuid.uuid4())
+            row = {
+                "id": admission_id,
+                "admission_number": f"ADM-{date.today().year}-{len(self.admissions) + 1:05d}",
+                "patient_id": patient.get("pid", data["patient_id"]),
+                "status": "admitted",
+                "created_by": created_by,
+                "admitted_at": _utcnow().isoformat(),
+                **data,
+            }
+            self.admissions[admission_id] = row
+            return row
+
+    def assign_bed(self, admission_id: str, bed_id: str, assigned_by: str | None, reason: str | None) -> dict[str, Any] | None:
+        with self._lock:
+            admission = self.admissions.get(admission_id)
+            bed = self.beds.get(bed_id)
+            if not admission or admission["status"] != "admitted" or not bed or bed["status"] != "available":
+                return None
+            now = _utcnow().isoformat()
+            for assignment in self.bed_assignments:
+                if assignment["admission_id"] == admission_id and assignment.get("released_at") is None:
+                    assignment["released_at"] = now
+                    assignment["release_reason"] = reason or "transfer"
+                    self.beds[assignment["bed_id"]]["status"] = "available"
+            bed["status"] = "occupied"
+            row = {
+                "id": str(uuid.uuid4()), "admission_id": admission_id, "bed_id": bed_id,
+                "assigned_by": assigned_by, "assigned_at": now, "reason": reason,
+            }
+            self.bed_assignments.append(row)
+            return row
+
+    def discharge_admission(self, admission_id: str, disposition: str, discharged_by: str | None) -> dict[str, Any] | None:
+        with self._lock:
+            admission = self.admissions.get(admission_id)
+            if not admission or admission["status"] != "admitted":
+                return None
+            now = _utcnow().isoformat()
+            admission.update({"status": "discharged", "discharged_at": now, "discharge_disposition": disposition, "discharged_by": discharged_by})
+            for assignment in self.bed_assignments:
+                if assignment["admission_id"] == admission_id and assignment.get("released_at") is None:
+                    assignment["released_at"] = now
+                    assignment["release_reason"] = "discharged"
+                    self.beds[assignment["bed_id"]]["status"] = "available"
+            return dict(admission)
+
+    def list_nursing_observations(self, admission_id: str) -> list[dict[str, Any]]:
+        return [row for row in self.nursing_observations if row["admission_id"] == admission_id]
+
+    def record_nursing_observation(self, admission_id: str, data: dict[str, Any], recorded_by: str | None) -> dict[str, Any] | None:
+        with self._lock:
+            admission = self.admissions.get(admission_id)
+            if not admission or admission["status"] != "admitted" or not recorded_by:
+                return None
+            row = {"id": str(uuid.uuid4()), "admission_id": admission_id, "recorded_by": recorded_by, "recorded_at": _utcnow().isoformat(), **data}
+            self.nursing_observations.append(row)
+            return row
+
+    def list_invoices(self) -> list[dict[str, Any]]:
+        return sorted(self.invoices.values(), key=lambda row: row["created_at"], reverse=True)
+
+    def list_payments(self) -> list[dict[str, Any]]:
+        return sorted(self.payments.values(), key=lambda row: row["created_at"], reverse=True)
+
+    def create_invoice(self, data: dict[str, Any], created_by: str | None) -> dict[str, Any] | None:
+        patient = self.get_patient(data["patient_id"])
+        if not patient:
+            return None
+        with self._lock:
+            items = []
+            subtotal = 0
+            for item in data["items"]:
+                amount = round(item["quantity"] * item["unit_price_kobo"])
+                items.append({**item, "amount_kobo": amount})
+                subtotal += amount
+            invoice_id = str(uuid.uuid4())
+            row = {"id": invoice_id, "invoice_number": f"INV-{date.today().year}-{len(self.invoices) + 1:06d}", "patient_id": patient.get("pid", data["patient_id"]), "status": "issued", "currency": "NGN", "subtotal_kobo": subtotal, "discount_kobo": 0, "total_kobo": subtotal, "items": items, "created_by": created_by, "created_at": _utcnow().isoformat(), **{key: value for key, value in data.items() if key != "items"}}
+            self.invoices[invoice_id] = row
+            return row
+
+    def record_pending_payment(self, data: dict[str, Any], received_by: str | None) -> dict[str, Any] | None:
+        with self._lock:
+            invoice = self.invoices.get(data["invoice_id"])
+            if not invoice or invoice["status"] not in ("issued", "part_paid"):
+                return None
+            committed = sum(
+                payment["amount_kobo"]
+                for payment in self.payments.values()
+                if payment["invoice_id"] == invoice["id"] and payment["status"] in ("pending", "confirmed")
+            )
+            if committed + data["amount_kobo"] > invoice["total_kobo"]:
+                return None
+            row = {"id": str(uuid.uuid4()), "receipt_number": f"RCT-{date.today().year}-{len(self.payments) + 1:06d}", "status": "pending", "currency": "NGN", "received_by": received_by, "created_at": _utcnow().isoformat(), **data}
+            self.payments[row["id"]] = row
+            return row
+
+    def confirm_payment(self, payment_id: str, confirmed_by: str | None) -> dict[str, Any] | None:
+        with self._lock:
+            payment = self.payments.get(payment_id)
+            if not payment or payment["status"] != "pending":
+                return None
+            invoice = self.invoices[payment["invoice_id"]]
+            payment.update({"status": "confirmed", "received_at": _utcnow().isoformat(), "confirmed_by": confirmed_by})
+            paid = sum(p["amount_kobo"] for p in self.payments.values() if p["invoice_id"] == invoice["id"] and p["status"] == "confirmed")
+            invoice["status"] = "paid" if paid >= invoice["total_kobo"] else "part_paid"
+            return dict(payment)
+
+    def list_clinical_form_templates(self) -> list[dict[str, Any]]:
+        return [row for row in self.clinical_form_templates.values() if row["is_active"]]
+
+    def create_clinical_form_template(self, data: dict[str, Any], created_by: str | None) -> dict[str, Any]:
+        with self._lock:
+            row = {"id": str(uuid.uuid4()), "version": 1, "is_active": True, "created_by": created_by, "created_at": _utcnow().isoformat(), **data}
+            self.clinical_form_templates[row["id"]] = row
+            return row
+
+    def create_clinical_form_response(self, data: dict[str, Any], recorded_by: str | None) -> dict[str, Any] | None:
+        template = self.clinical_form_templates.get(data["template_id"])
+        patient = self.get_patient(data["patient_id"])
+        if not template or not patient or not recorded_by:
+            return None
+        row = {"id": str(uuid.uuid4()), "template_version": template["version"], "recorded_by": recorded_by, "created_at": _utcnow().isoformat(), **data}
+        self.clinical_form_responses.append(row)
+        return row
+
+    def list_clinical_form_responses(self, patient_id: str) -> list[dict[str, Any]]:
+        return [row for row in self.clinical_form_responses if row["patient_id"] == patient_id]
+
+    def list_clinical_orders(self, patient_id: str) -> list[dict[str, Any]]:
+        return [row for row in self.clinical_orders.values() if row["patient_id"] == patient_id]
+
+    def list_order_worklist(self, order_type: str) -> list[dict[str, Any]]:
+        return [row for row in self.clinical_orders.values() if row["order_type"] == order_type and row["status"] not in ("completed", "cancelled")]
+
+    def create_clinical_order(self, data: dict[str, Any], ordered_by: str | None) -> dict[str, Any] | None:
+        patient = self.get_patient(data["patient_id"])
+        if not patient or not ordered_by:
+            return None
+        with self._lock:
+            order_id = str(uuid.uuid4())
+            items = []
+            for item in data["items"]:
+                item_row = {"id": str(uuid.uuid4()), "order_id": order_id, "status": "requested", **item}
+                self.clinical_order_items[item_row["id"]] = item_row
+                items.append(item_row)
+            row = {"id": order_id, "order_number": f"ORD-{date.today().year}-{len(self.clinical_orders) + 1:06d}", "patient_id": patient.get("pid", data["patient_id"]), "ordered_by": ordered_by, "ordered_at": _utcnow().isoformat(), "status": "requested", "items": items, **{key: value for key, value in data.items() if key != "items"}}
+            self.clinical_orders[order_id] = row
+            return row
+
+    def update_clinical_order_status(self, order_id: str, data: dict[str, Any], updated_by: str | None) -> dict[str, Any] | None:
+        with self._lock:
+            order = self.clinical_orders.get(order_id)
+            if not order or order["status"] in ("completed", "cancelled"):
+                return None
+            order.update({"status": data["status"], "updated_by": updated_by})
+            if data["status"] == "cancelled":
+                order.update({"cancelled_at": _utcnow().isoformat(), "cancelled_by": updated_by, "cancellation_reason": data["cancellation_reason"]})
+            return dict(order)
+
+    def record_order_item_result(self, item_id: str, data: dict[str, Any], resulted_by: str | None) -> dict[str, Any] | None:
+        with self._lock:
+            item = self.clinical_order_items.get(item_id)
+            if not item or item["status"] == "cancelled":
+                return None
+            item.update({"status": "completed", "resulted_by": resulted_by, "resulted_at": _utcnow().isoformat(), **data})
+            return dict(item)
+
+    def _is_medication_item(self, item_id: str) -> bool:
+        item = self.clinical_order_items.get(item_id)
+        return bool(item and self.clinical_orders.get(item["order_id"], {}).get("order_type") == "medication")
+
+    def dispense_medication(self, order_item_id: str, data: dict[str, Any], dispensed_by: str | None) -> dict[str, Any] | None:
+        if not dispensed_by or not self._is_medication_item(order_item_id):
+            return None
+        with self._lock:
+            row = {"id": str(uuid.uuid4()), "order_item_id": order_item_id, "dispensed_by": dispensed_by, "status": "dispensed", "dispensed_at": _utcnow().isoformat(), **data}
+            self.medication_dispenses[row["id"]] = row
+            return row
+
+    def record_medication_administration(self, order_item_id: str, data: dict[str, Any], administered_by: str | None) -> dict[str, Any] | None:
+        if not administered_by or not self._is_medication_item(order_item_id):
+            return None
+        dispense_id = data.get("dispense_id")
+        if dispense_id and self.medication_dispenses.get(dispense_id, {}).get("order_item_id") != order_item_id:
+            return None
+        with self._lock:
+            row = {"id": str(uuid.uuid4()), "order_item_id": order_item_id, "administered_by": administered_by, "administered_at": _utcnow().isoformat(), **data}
+            self.medication_administrations.append(row)
+            return row
+
+    def list_medication_administrations(self, order_item_id: str) -> list[dict[str, Any]]:
+        return [row for row in self.medication_administrations if row["order_item_id"] == order_item_id]
+
+    def get_discharge_summary(self, admission_id: str) -> dict[str, Any] | None:
+        return self.discharge_summaries.get(admission_id)
+
+    def upsert_discharge_summary(self, admission_id: str, data: dict[str, Any], authored_by: str | None) -> dict[str, Any] | None:
+        with self._lock:
+            admission = self.admissions.get(admission_id)
+            if not admission or not authored_by:
+                return None
+            existing = self.discharge_summaries.get(admission_id)
+            if existing and existing["status"] == "final":
+                return None
+            status = "final" if data.pop("finalize") else "draft"
+            row = {
+                "id": existing["id"] if existing else str(uuid.uuid4()), "admission_id": admission_id,
+                "patient_id": admission["patient_id"], "authored_by": authored_by, "status": status,
+                "created_at": existing["created_at"] if existing else _utcnow().isoformat(),
+                "updated_at": _utcnow().isoformat(), **data,
+            }
+            if status == "final":
+                row["finalized_at"] = _utcnow().isoformat()
+            self.discharge_summaries[admission_id] = row
+            return row
 
 
 store = MemoryStore()

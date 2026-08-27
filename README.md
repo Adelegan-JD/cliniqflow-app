@@ -1,167 +1,76 @@
-# CliniqFlow
+# CLINIQ-FLOW
 
-CliniqFlow is an end-to-end clinical workflow platform that combines a role-based web app, a FastAPI backend, and an AI engine for triage support, clinical note structuring, speech-to-text, and medication guidance. It is designed to streamline patient intake, visits, and documentation across record officers, nurses, doctors, and admins.
+CLINIQ-FLOW is a full inpatient and outpatient EMR for public hospitals. It gives clinical teams an auditable record of care while adding focused decision support at the moments that carry the most risk: triage, consultation documentation, and paediatric medication dosing.
 
-CliniqFlow is a decision-support tool. It organizes information and flags issues, but does not diagnose.
+It supports clinicians; it does not diagnose, prescribe automatically, or replace clinical judgement.
 
-## What this project does
+## Current scope
 
-- Patient registration and visit creation (record officer workflows)
-- Nurse triage capture and urgency assessment
-- Doctor queue management and visit documentation (SOAP summaries)
-- AI assistance for vitals-based urgency, transcript-to-SOAP structuring, and clinical validations
-- ASR (audio transcription with speaker diarization)
-- RAG-based medication guidance and dose validation
+- Patient registration, visits, triage, doctor queues, consultation records, and clinical forms
+- Outpatient departments, emergency units, specialty clinics, wards, beds, admissions, transfers, nursing observations, medication administration, and discharge summaries
+- Pharmacy medication worklists, dispensing records, invoices, payments, and payment confirmation
+- Admin-managed starter hospital catalogue (departments, locations, wards, clinics and beds) that can be extended for each hospital
+- Role-based workflows for admin, record officer, nurse, doctor, pharmacist, laboratory scientist, and billing officer
+- Audit events for sensitive EMR and billing actions
 
-## Architecture at a glance
+## AI decision support
 
+1. **Offline Yoruba/English transcription.** The AI engine defaults to the locally cached `LyngualLabs/whisper-small-yoruba` model. It runs offline when `ASR_OFFLINE_ONLY=true`; optional speaker diarization is disabled by default.
+2. **Structured clinical notes and SOAP draft.** Transcript processing is currently deterministic and rule-based, producing structured findings, confidence signals and an editable SOAP draft. It is not a paid generative AI call.
+3. **Paediatric dose safety and medication evidence.** The medication service retrieves curated evidence and applies explicit dose rules. The doctor-facing dose-check route calls `/rag/validate-dose`; unsafe or incomplete results require a documented clinician override. The current drug rule set is deliberately small and must be clinically governed and expanded before production use.
+
+The original doctor consultation screen is connected to transcript-to-SOAP and the dose check. The newer prescribing/order workflow still needs the same guard integrated before it is feature-complete.
+
+## Architecture
+
+```mermaid
 flowchart LR
-  F[Frontend (React + Vite)] -->|REST + JWT| B[Backend API (FastAPI)]
-  B -->|HTTP + Bearer token| A[AI Engine (FastAPI)]
-  B -->|SQLAlchemy| DB[(PostgreSQL)]
-  A -->|RAG files| KB[(Medication knowledge files)]
-  A -->|Models| ASR[Whisper + Pyannote]
+  UI[React frontend] -->|JWT + REST| API[FastAPI backend]
+  API -->|service token| AI[Offline AI engine]
+  API -->|SQLAlchemy migrations| DB[(PostgreSQL)]
+  AI --> ASR[Local Yoruba Whisper]
+  AI --> RAG[Curated medication evidence + dose rules]
 ```
 
-## Core workflows
+### Supabase position
 
-1) Registration and visit
-- Record officer registers a patient and creates a visit.
-- Visit enters the triage queue with status WAITING_FOR_TRIAGE.
+Supabase can remain in phase one for authentication and, if approved for the hospital’s data-governance requirements, managed PostgreSQL. The FastAPI backend is the only application layer allowed to write clinical, medication, billing, and audit data. Do not let the frontend write EMR tables directly through the Supabase client. Use one PostgreSQL source of truth, apply the migrations in `backend/database/migrations`, enforce server-side role checks, and keep Supabase service-role credentials only on the backend.
 
-2) Nurse triage
-- Nurse views the triage queue and submits vitals.
-- Backend can call the AI engine to produce urgency level and abnormal-vital reasons.
+For an offline/on-premises hospital deployment, the same backend can use self-managed PostgreSQL instead. Payment card data must never be stored in this application; store only processor references and payment status.
 
-3) Doctor encounter
-- Doctor starts an exam from the queue.
-- Doctor saves the visit with SOAP notes, prescriptions, and transcript.
-- Backend can request AI-generated SOAP output from transcript.
+## Services
 
-4) AI assistance
-- NLP: vitals urgency and transcript-to-SOAP structuring.
-- RAG: medication evidence retrieval and dose validation rules.
-- ASR: diarized transcription of uploaded audio files.
+| Service | Location | Responsibility |
+| --- | --- | --- |
+| Frontend | `frontend/` | Role-based clinical and administrative workspaces |
+| Backend | `backend/` | EMR APIs, permissions, audit trail, billing and AI orchestration |
+| AI engine | `ai_engine/` | Offline ASR, deterministic SOAP structuring, medication retrieval and dose validation |
 
-## Folder structure
+## Local setup
 
-```
-.
-├── ai_engine/                     # AI engine service (NLP, ASR, RAG)
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── asr_api.py
-│   │   │   └── rag_api.py
-│   │   ├── asr/
-│   │   ├── nlp/
-│   │   │   ├── api/
-│   │   │   ├── models/
-│   │   │   └── src/
-│   │   └── Rag/
-│   │       ├── files/
-│   │       └── ...
-│   ├── main.py
-│   └── requirements.txt
-├── backend/                       # Core API, auth, data layer, orchestration
-│   ├── app/
-│   │   ├── api/routes/
-│   │   ├── core/
-│   │   ├── repositories/
-│   │   ├── schemas/
-│   │   └── services/
-│   ├── auth/
-│   ├── database/
-│   ├── tests/
-│   └── requirements.txt
-├── frontend/                      # React UI
-│   ├── public/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── contexts/
-│   │   ├── hooks/
-│   │   ├── pages/
-│   │   ├── store/
-│   │   └── utils/
-│   ├── index.html
-│   └── package.json
-├── context.txt                    # Data tables quick reference
-└── PATIENT_DATA_FLOW_ANALYSIS.md  # Detailed flow analysis
+1. Configure the backend and AI environment files from their `.env.example` files. Use a strong, matching `AI_ENGINE_TOKEN`; it is an internal service token, not an OpenAI key.
+2. Set `DATABASE_URL` to PostgreSQL, create the legacy baseline once with `python database/schema.py`, then apply reviewed migrations with `python -m database.migrate`.
+3. Ensure the Yoruba Whisper snapshot is local. Set `ASR_MODEL_PATH` to its snapshot folder if it is not in the standard Hugging Face cache.
+4. Start the AI engine on port 8001, backend on port 8000, and frontend on port 5173.
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m pytest -q
+
+cd ..\frontend
+npm run build
 ```
 
-## Services and responsibilities
+Backend API documentation is available at `http://127.0.0.1:8000/docs`; AI-engine documentation is at `http://127.0.0.1:8001/docs`.
 
-### Frontend (React + Vite)
-- Location: frontend
-- Responsibilities:
-  - Role-based UI: admin, record officer, nurse, doctor
-  - Registration, triage, queues, records, and dashboards
-  - Uses `VITE_API_URL` to reach the backend
-  - Uses Supabase client for auth
+For staging and production release gates, database migration procedure, TLS
+boundary, offline-model provisioning, and rollback expectations, follow
+[DEPLOYMENT_READINESS.md](DEPLOYMENT_READINESS.md). This project is not
+deployment-ready until every listed staging check has evidence of completion.
 
-### Backend API (FastAPI)
-- Location: backend
-- Responsibilities:
-  - Role-based REST endpoints
-  - Patient and visit lifecycle
-  - Auth and access control (Supabase JWT or dev-bypass)
-  - Orchestration to AI engine
+## Production readiness notes
 
-### AI Engine (FastAPI)
-- Location: ai_engine
-- Responsibilities:
-  - NLP workflows for triage and SOAP structuring
-  - RAG medication retrieval and dose validation
-  - ASR transcription with diarization
-
-## Backend API overview
-
-Role-scoped endpoints (backend/app/api/routes):
-- /record-officer: patient registration, search, visit creation, dashboards
-- /nurse: triage queue, triage submission, nurse stats
-- /doctor: doctor queue, exam start/cancel, save visit, doctor stats
-- /admin: staff invitation, metrics, admin stats
-- /patients and /visits: REST-style resources for integrations
-- /ai, /nlp, /translate/chunk: orchestration to AI engine
-
-Docs: http://127.0.0.1:8000/docs
-
-## AI Engine API overview
-
-- /nlp/vitals-urgency: nurse vitals to urgency assessment
-- /nlp/nurse-to-doctor: nurse handoff to SOAP + structured data
-- /nlp/process: legacy transcript processing
-- /rag/retrieve: evidence retrieval from medication knowledge files
-- /rag/validate-dose: deterministic dose safety checks
-- /asr/transcribe: diarized transcription from audio upload
-
-Docs: http://127.0.0.1:8001/docs
-
-## Data model (core tables)
-
-- patients: core patient identity
-- patients_metadata: contact, next of kin, and demographics
-- users: staff accounts and roles
-- triage: vitals, urgency, nurse assessments
-- queue: visit queue state
-- consultations: doctor encounter data
-- ai_notes: AI-generated outputs
-- dosage_logs: medication validation audits
-- medical_knowledge: RAG knowledge sources
-- visitation: visit history
-
-
-Note: the AI engine loads Whisper and diarization models. First run may take time and download model files.
-
-
-
-## Testing
-
-Backend:
-pytest
-```
-
-AI engine:
-pytest
-```
-
-
+- Validate ASR with representative Nigerian English and Yoruba recordings before clinical rollout.
+- Clinical leadership must approve every dosage rule, source document, alert threshold, and override policy.
+- Deploy HTTPS, managed secrets, encrypted backups, least-privilege database roles, MFA, session expiry, immutable audit retention, and tested disaster recovery.
+- The app currently has legacy direct-Supabase nurse screens; move those remaining reads/writes behind the backend before production.

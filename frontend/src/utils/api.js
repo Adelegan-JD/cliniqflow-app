@@ -1,7 +1,7 @@
 import { getToken } from "./uitils";
 import { supabase } from "./supabaseClient";
 
-const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+export const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // Cache session info to avoid repeated calls to getSession()
 let cachedSession = null;
@@ -15,8 +15,9 @@ if (typeof window !== "undefined") {
     cachedSession = session;
     sessionCacheTime = Date.now();
     if (session?.user) {
-      cachedRole =
-        session.user.user_metadata?.role || session.user.app_metadata?.role;
+      // Roles are administrator-controlled. User metadata is editable by the
+      // account holder and must never influence authorization behaviour.
+      cachedRole = session.user.app_metadata?.role || null;
     } else {
       cachedRole = null;
     }
@@ -43,8 +44,7 @@ const buildAuthHeaders = async () => {
         data: { session },
       } = await supabase.auth.getSession();
       if (session?.user) {
-        role =
-          session.user.user_metadata?.role || session.user.app_metadata?.role;
+        role = session.user.app_metadata?.role || null;
         cachedRole = role;
         sessionCacheTime = Date.now();
       }
@@ -135,6 +135,24 @@ const api = {
       err.status = response.status;
       err.response = data;
       throw err;
+    }
+    return data;
+  },
+  put: async function (endpoint, payload) {
+    const response = await fetch(`${apiUrl}${endpoint}`, {
+      method: "PUT",
+      headers: await buildAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const raw = await response.text();
+    let data;
+    try { data = raw ? JSON.parse(raw) : {}; }
+    catch (_) { throw new Error(response.ok ? "Invalid response" : raw || `Request failed (${response.status})`); }
+    if (!response.ok) {
+      const error = new Error(data?.error?.message ?? data?.detail ?? "Request failed");
+      error.status = response.status;
+      error.response = data;
+      throw error;
     }
     return data;
   },

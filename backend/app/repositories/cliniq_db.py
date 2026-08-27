@@ -544,6 +544,49 @@ class DbStore:
                 else None,
             }
 
+    def record_dosage_check(
+        self, visit_id: str | None, requested_by: str | None, request: dict[str, Any], assessment: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Persist the exact advisory and evidence shown to the doctor."""
+        _require_conn()
+        if not visit_id or not requested_by:
+            return None
+        with engine.begin() as conn:
+            visit = _resolve_visit(conn, visit_id)
+            if not visit:
+                return None
+            row = conn.execute(text("""
+                INSERT INTO dosage_checks (
+                    patient_id, visit_id, requested_by, drug_name, patient_age_years,
+                    patient_weight_kg, requested_dose_mg, frequency_per_day, route,
+                    safety_level, request_payload, assessment_payload, evidence_snapshot,
+                    rule_set_version, model_identifier
+                ) VALUES (
+                    :patient_id, :visit_id, :requested_by, :drug_name, :age_years,
+                    :weight_kg, :dose_mg, :frequency, :route, :safety_level,
+                    CAST(:request_payload AS JSONB), CAST(:assessment_payload AS JSONB),
+                    CAST(:evidence AS JSONB), :rule_set_version, :model_identifier
+                ) RETURNING id::text, created_at;
+            """), {
+                "patient_id": visit["patient_id"], "visit_id": visit["id"],
+                "requested_by": requested_by, "drug_name": request["drug"],
+                "age_years": request["age_years"], "weight_kg": request["weight_kg"],
+                "dose_mg": request["chosen_dose_mg_per_day"] / request["frequency_per_day"],
+                "frequency": request["frequency_per_day"], "route": None,
+                "safety_level": assessment.get("safety_level", "insufficient_data"),
+                "request_payload": json.dumps(request), "assessment_payload": json.dumps(assessment),
+                "evidence": json.dumps(assessment.get("evidence", [])),
+                "rule_set_version": "configured-rule-registry-v1",
+                "model_identifier": "offline-deterministic-dose-validator",
+            }).mappings().one()
+            conn.execute(text("""
+                INSERT INTO audit_events (actor_staff_id, action, entity_type, entity_id, patient_id, metadata)
+                VALUES (:actor, 'dosage_check.created', 'dosage_check', :id, :patient_id,
+                    jsonb_build_object('visit_id', :visit_id, 'safety_level', :safety_level));
+            """), {"actor": requested_by, "id": row["id"], "patient_id": visit["patient_id"],
+                   "visit_id": str(visit["id"]), "safety_level": assessment.get("safety_level", "insufficient_data")})
+        return {"id": row["id"], "created_at": row["created_at"].isoformat()}
+
     def list_visits_for_nurse_queue(self) -> list[dict[str, Any]]:
         _require_conn()
         with engine.connect() as conn:
@@ -1425,6 +1468,590 @@ class DbStore:
             }
             for x in rows
         ]
+
+
+    def list_departments(self) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            rows = conn.execute(text("SELECT id::text, code, name, specialty, is_active FROM departments ORDER BY name")).mappings().all()
+        return [dict(row) for row in rows]
+
+    def create_department(self, data: dict[str, Any]) -> dict[str, Any]:
+        _require_conn()
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                INSERT INTO departments (code, name, specialty)
+                VALUES (:code, :name, :specialty)
+                RETURNING id::text, code, name, specialty, is_active, created_at;
+            """), data).mappings().one()
+        return dict(row)
+
+    def load_starter_catalogue(self, departments: list[tuple[str, str, str]], locations: list[tuple[str, str, str, str | None]]) -> dict[str, int]:
+        _require_conn()
+        added_departments = 0
+        added_locations = 0
+        with engine.begin() as conn:
+            for code, name, specialty in departments:
+                result = conn.execute(text("""
+                    INSERT INTO departments (code, name, specialty) VALUES (:code, :name, :specialty)
+                    ON CONFLICT (code) DO NOTHING RETURNING id;
+                """), {"code": code, "name": name, "specialty": specialty})
+                added_departments += 1 if result.first() else 0
+            department_ids = {row["code"]: str(row["id"]) for row in conn.execute(text("SELECT id, code FROM departments")).mappings()}
+            for code, name, location_type, department_code in locations:
+                result = conn.execute(text("""
+                    INSERT INTO clinical_locations (department_id, code, name, location_type)
+                    VALUES (CAST(:department_id AS UUID), :code, :name, :location_type)
+                    ON CONFLICT (code) DO NOTHING RETURNING id;
+                """), {"department_id": department_ids.get(department_code), "code": code, "name": name, "location_type": location_type})
+                added_locations += 1 if result.first() else 0
+        return {"departments_added": added_departments, "locations_added": added_locations}
+
+    def list_locations(self) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT l.id::text, l.code, l.name, l.location_type, l.department_id::text,
+                       l.is_active, d.name AS department_name
+                FROM clinical_locations l LEFT JOIN departments d ON d.id = l.department_id
+                ORDER BY l.name;
+            """)).mappings().all()
+        return [dict(row) for row in rows]
+
+    def create_location(self, data: dict[str, Any]) -> dict[str, Any]:
+        _require_conn()
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                INSERT INTO clinical_locations (department_id, code, name, location_type)
+                VALUES (CAST(:department_id AS UUID), :code, :name, :location_type)
+                RETURNING id::text, department_id::text, code, name, location_type, is_active, created_at;
+            """), data).mappings().one()
+        return dict(row)
+
+    def list_beds(self) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT b.id::text, b.code, b.bed_class, b.status, b.location_id::text, l.name AS location_name
+                FROM beds b JOIN clinical_locations l ON l.id = b.location_id
+                ORDER BY l.name, b.code;
+            """)).mappings().all()
+        return [dict(row) for row in rows]
+
+    def create_bed(self, data: dict[str, Any]) -> dict[str, Any]:
+        _require_conn()
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                INSERT INTO beds (location_id, code, bed_class)
+                VALUES (CAST(:location_id AS UUID), :code, :bed_class)
+                RETURNING id::text, location_id::text, code, bed_class, status, created_at;
+            """), data).mappings().one()
+        return dict(row)
+
+    def list_admissions(self) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT a.id::text, a.admission_number, a.patient_id, a.status, a.admission_type,
+                       a.admission_reason, a.admitted_at, a.discharged_at,
+                       trim(concat_ws(' ', p.first_name, p.last_name)) AS patient_name,
+                       d.name AS department_name
+                FROM admissions a JOIN patients p ON p.pid = a.patient_id
+                LEFT JOIN departments d ON d.id = a.admitting_department_id
+                ORDER BY a.admitted_at DESC;
+            """)).mappings().all()
+        return [dict(row) for row in rows]
+
+    def create_admission(self, data: dict[str, Any], created_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        with engine.begin() as conn:
+            patient_pid, _ = _resolve_patient_pid(conn, data["patient_id"])
+            if not patient_pid:
+                return None
+            number = f"ADM-{datetime.utcnow().strftime('%Y%m%d')}-{secrets.token_hex(3).upper()}"
+            row = conn.execute(text("""
+                INSERT INTO admissions (
+                    admission_number, patient_id, source_visit_id, admitting_department_id,
+                    attending_doctor_id, admission_type, admission_reason, created_by
+                ) VALUES (
+                    :admission_number, :patient_id, CAST(:source_visit_id AS UUID),
+                    CAST(:admitting_department_id AS UUID), :attending_doctor_id,
+                    :admission_type, :admission_reason, :created_by
+                ) RETURNING id::text, admission_number, patient_id, status, admission_type,
+                    admission_reason, admitted_at, created_at;
+            """), {**data, "patient_id": patient_pid, "admission_number": number, "created_by": created_by}).mappings().one()
+        return dict(row)
+
+    def assign_bed(self, admission_id: str, bed_id: str, assigned_by: str | None, reason: str | None) -> dict[str, Any] | None:
+        """Assign or transfer atomically, preventing two active occupants per bed."""
+        _require_conn()
+        with engine.begin() as conn:
+            admission = conn.execute(text("SELECT id FROM admissions WHERE id = CAST(:id AS UUID) AND status = 'admitted' FOR UPDATE"), {"id": admission_id}).first()
+            bed = conn.execute(text("SELECT id FROM beds WHERE id = CAST(:id AS UUID) AND status = 'available' FOR UPDATE"), {"id": bed_id}).first()
+            if not admission or not bed:
+                return None
+            current = conn.execute(text("SELECT bed_id FROM bed_assignments WHERE admission_id = CAST(:id AS UUID) AND released_at IS NULL FOR UPDATE"), {"id": admission_id}).mappings().first()
+            if current:
+                conn.execute(text("""
+                    UPDATE bed_assignments SET released_at = NOW(), release_reason = :reason
+                    WHERE admission_id = CAST(:admission_id AS UUID) AND released_at IS NULL;
+                """), {"admission_id": admission_id, "previous_bed_id": str(current["bed_id"]), "reason": reason or "transfer"})
+                conn.execute(text("UPDATE beds SET status = 'available' WHERE id = CAST(:previous_bed_id AS UUID)"), {"previous_bed_id": str(current["bed_id"])})
+            row = conn.execute(text("""
+                INSERT INTO bed_assignments (admission_id, bed_id, assigned_by)
+                VALUES (CAST(:admission_id AS UUID), CAST(:bed_id AS UUID), :assigned_by)
+                RETURNING id::text, admission_id::text, bed_id::text, assigned_by, assigned_at;
+            """), {"admission_id": admission_id, "bed_id": bed_id, "assigned_by": assigned_by}).mappings().first()
+            conn.execute(text("UPDATE beds SET status = 'occupied' WHERE id = CAST(:bed_id AS UUID)"), {"bed_id": bed_id})
+        return dict(row) if row else None
+
+    def discharge_admission(self, admission_id: str, disposition: str, discharged_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                UPDATE admissions
+                SET status = 'discharged', discharged_at = NOW(), discharge_disposition = :disposition, updated_at = NOW()
+                WHERE id = CAST(:admission_id AS UUID) AND status = 'admitted'
+                RETURNING id::text, admission_number, patient_id, status, discharged_at, discharge_disposition;
+            """), {"admission_id": admission_id, "disposition": disposition}).mappings().first()
+            if not row:
+                return None
+            active = conn.execute(text("""
+                UPDATE bed_assignments SET released_at = NOW(), release_reason = 'discharged'
+                WHERE admission_id = CAST(:admission_id AS UUID) AND released_at IS NULL
+                RETURNING bed_id::text;
+            """), {"admission_id": admission_id}).mappings().all()
+            for assignment in active:
+                conn.execute(text("UPDATE beds SET status = 'available' WHERE id = CAST(:bed_id AS UUID)"), {"bed_id": assignment["bed_id"]})
+            conn.execute(text("""
+                INSERT INTO audit_events (actor_staff_id, action, entity_type, entity_id, patient_id, metadata)
+                VALUES (:actor, 'admission.discharged', 'admission', :id, :patient_id, jsonb_build_object('disposition', :disposition));
+            """), {"actor": discharged_by, "id": admission_id, "patient_id": row["patient_id"], "disposition": disposition})
+        return dict(row)
+
+    def list_nursing_observations(self, admission_id: str) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT id::text, admission_id::text, recorded_by, recorded_at, temperature_c, pulse_rate,
+                    respiratory_rate, systolic_bp, diastolic_bp, oxygen_saturation, pain_score, notes
+                FROM nursing_observations WHERE admission_id = CAST(:admission_id AS UUID)
+                ORDER BY recorded_at DESC;
+            """), {"admission_id": admission_id}).mappings().all()
+        return [dict(row) for row in rows]
+
+    def record_nursing_observation(self, admission_id: str, data: dict[str, Any], recorded_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        if not recorded_by:
+            return None
+        with engine.begin() as conn:
+            active = conn.execute(text("SELECT id, patient_id FROM admissions WHERE id = CAST(:id AS UUID) AND status = 'admitted'"), {"id": admission_id}).mappings().first()
+            if not active:
+                return None
+            row = conn.execute(text("""
+                INSERT INTO nursing_observations (
+                    admission_id, recorded_by, temperature_c, pulse_rate, respiratory_rate, systolic_bp,
+                    diastolic_bp, oxygen_saturation, pain_score, notes
+                ) VALUES (
+                    CAST(:admission_id AS UUID), :recorded_by, :temperature_c, :pulse_rate, :respiratory_rate,
+                    :systolic_bp, :diastolic_bp, :oxygen_saturation, :pain_score, :notes
+                ) RETURNING id::text, admission_id::text, recorded_by, recorded_at, temperature_c, pulse_rate,
+                    respiratory_rate, systolic_bp, diastolic_bp, oxygen_saturation, pain_score, notes;
+            """), {
+                "admission_id": admission_id, "recorded_by": recorded_by,
+                "temperature_c": data.get("temperature_c"), "pulse_rate": data.get("pulse_rate"),
+                "respiratory_rate": data.get("respiratory_rate"), "systolic_bp": data.get("systolic_bp"),
+                "diastolic_bp": data.get("diastolic_bp"), "oxygen_saturation": data.get("oxygen_saturation"),
+                "pain_score": data.get("pain_score"), "notes": data.get("notes"),
+            }).mappings().one()
+        return dict(row)
+
+    def list_invoices(self) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT i.id::text, i.invoice_number, i.patient_id, i.visit_id::text, i.admission_id::text,
+                    i.status, i.currency, i.subtotal_kobo, i.discount_kobo, i.total_kobo, i.created_at,
+                    trim(concat_ws(' ', p.first_name, p.last_name)) AS patient_name
+                FROM invoices i JOIN patients p ON p.pid = i.patient_id ORDER BY i.created_at DESC;
+            """)).mappings().all()
+        return [dict(row) for row in rows]
+
+    def list_payments(self) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT p.id::text, p.receipt_number, p.invoice_id::text, p.amount_kobo, p.currency,
+                    p.method, p.status, p.provider_name, p.provider_reference, p.received_at, p.created_at,
+                    i.invoice_number, i.patient_id,
+                    trim(concat_ws(' ', patient.first_name, patient.last_name)) AS patient_name
+                FROM payments p JOIN invoices i ON i.id = p.invoice_id
+                JOIN patients patient ON patient.pid = i.patient_id
+                ORDER BY p.created_at DESC;
+            """)).mappings().all()
+        return [dict(row) for row in rows]
+
+    def create_invoice(self, data: dict[str, Any], created_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        with engine.begin() as conn:
+            patient_pid, _ = _resolve_patient_pid(conn, data["patient_id"])
+            if not patient_pid:
+                return None
+            items = []
+            subtotal = 0
+            for item in data["items"]:
+                amount = round(float(item["quantity"]) * int(item["unit_price_kobo"]))
+                items.append({**item, "amount_kobo": amount})
+                subtotal += amount
+            invoice_number = f"INV-{datetime.utcnow().strftime('%Y%m%d')}-{secrets.token_hex(3).upper()}"
+            invoice = conn.execute(text("""
+                INSERT INTO invoices (invoice_number, patient_id, visit_id, admission_id, billing_account_id,
+                    status, subtotal_kobo, total_kobo, issued_at, created_by)
+                VALUES (:invoice_number, :patient_id, CAST(:visit_id AS UUID), CAST(:admission_id AS UUID),
+                    CAST(:billing_account_id AS UUID), 'issued', :subtotal, :subtotal, NOW(), :created_by)
+                RETURNING id::text, invoice_number, patient_id, visit_id::text, admission_id::text,
+                    status, currency, subtotal_kobo, discount_kobo, total_kobo, issued_at, created_at;
+            """), {**data, "patient_id": patient_pid, "invoice_number": invoice_number, "subtotal": subtotal, "created_by": created_by}).mappings().one()
+            for item in items:
+                conn.execute(text("""
+                    INSERT INTO invoice_items (invoice_id, service_code, description, quantity, unit_price_kobo, amount_kobo)
+                    VALUES (CAST(:invoice_id AS UUID), :service_code, :description, :quantity, :unit_price_kobo, :amount_kobo);
+                """), {**item, "invoice_id": invoice["id"]})
+            conn.execute(text("""
+                INSERT INTO audit_events (actor_staff_id, action, entity_type, entity_id, patient_id, after_state)
+                VALUES (:actor, 'invoice.issued', 'invoice', :id, :patient_id, CAST(:state AS JSONB));
+            """), {"actor": created_by, "id": invoice["id"], "patient_id": patient_pid, "state": json.dumps({"total_kobo": subtotal, "currency": "NGN"})})
+        return {**dict(invoice), "items": items}
+
+    def record_pending_payment(self, data: dict[str, Any], received_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        with engine.begin() as conn:
+            invoice = conn.execute(text("SELECT id FROM invoices WHERE id = CAST(:id AS UUID) AND status IN ('issued', 'part_paid') FOR UPDATE"), {"id": data["invoice_id"]}).first()
+            if not invoice:
+                return None
+            committed = conn.execute(text("""
+                SELECT COALESCE(SUM(amount_kobo), 0) FROM payments
+                WHERE invoice_id = CAST(:invoice_id AS UUID) AND status IN ('pending', 'confirmed');
+            """), {"invoice_id": data["invoice_id"]}).scalar() or 0
+            total = conn.execute(text("SELECT total_kobo FROM invoices WHERE id = CAST(:invoice_id AS UUID)"), {"invoice_id": data["invoice_id"]}).scalar() or 0
+            if int(committed) + int(data["amount_kobo"]) > int(total):
+                return None
+            receipt_number = f"RCT-{datetime.utcnow().strftime('%Y%m%d')}-{secrets.token_hex(3).upper()}"
+            row = conn.execute(text("""
+                INSERT INTO payments (receipt_number, invoice_id, amount_kobo, method, provider_name, provider_reference, received_by)
+                VALUES (:receipt_number, CAST(:invoice_id AS UUID), :amount_kobo, :method,
+                    :provider_name, :provider_reference, :received_by)
+                RETURNING id::text, receipt_number, invoice_id::text, amount_kobo, currency, method,
+                    status, provider_name, provider_reference, created_at;
+            """), {**data, "receipt_number": receipt_number, "received_by": received_by}).mappings().one()
+        return dict(row)
+
+    def confirm_payment(self, payment_id: str, confirmed_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        with engine.begin() as conn:
+            payment = conn.execute(text("SELECT id, invoice_id, amount_kobo FROM payments WHERE id = CAST(:id AS UUID) AND status = 'pending' FOR UPDATE"), {"id": payment_id}).mappings().first()
+            if not payment:
+                return None
+            invoice = conn.execute(text("SELECT id, patient_id, total_kobo FROM invoices WHERE id = :id FOR UPDATE"), {"id": payment["invoice_id"]}).mappings().one()
+            row = conn.execute(text("""
+                UPDATE payments SET status = 'confirmed', received_at = NOW(), updated_at = NOW()
+                WHERE id = CAST(:id AS UUID)
+                RETURNING id::text, receipt_number, invoice_id::text, amount_kobo, currency, method, status, received_at;
+            """), {"id": payment_id}).mappings().one()
+            confirmed_total = conn.execute(text("SELECT COALESCE(SUM(amount_kobo), 0) FROM payments WHERE invoice_id = :invoice_id AND status = 'confirmed'"), {"invoice_id": payment["invoice_id"]}).scalar() or 0
+            invoice_status = 'paid' if int(confirmed_total) >= int(invoice["total_kobo"]) else 'part_paid'
+            conn.execute(text("UPDATE invoices SET status = :status, updated_at = NOW() WHERE id = :id"), {"status": invoice_status, "id": payment["invoice_id"]})
+            conn.execute(text("""
+                INSERT INTO audit_events (actor_staff_id, action, entity_type, entity_id, patient_id, after_state)
+                VALUES (:actor, 'payment.confirmed', 'payment', :id, :patient_id, CAST(:state AS JSONB));
+            """), {"actor": confirmed_by, "id": payment_id, "patient_id": invoice["patient_id"], "state": json.dumps({"invoice_status": invoice_status, "amount_kobo": payment["amount_kobo"]})})
+        return {**dict(row), "invoice_status": invoice_status}
+
+    def list_clinical_form_templates(self) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT t.id::text, t.department_id::text, t.code, t.name, t.description,
+                    t.schema_json, t.version, t.is_active, d.name AS department_name
+                FROM clinical_form_templates t
+                LEFT JOIN departments d ON d.id = t.department_id
+                WHERE t.is_active = TRUE
+                ORDER BY d.name NULLS FIRST, t.name;
+            """)).mappings().all()
+        return [dict(row) for row in rows]
+
+    def create_clinical_form_template(self, data: dict[str, Any], created_by: str | None) -> dict[str, Any]:
+        _require_conn()
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                INSERT INTO clinical_form_templates (department_id, code, name, description, schema_json, created_by)
+                VALUES (CAST(:department_id AS UUID), :code, :name, :description, CAST(:schema_json AS JSONB), :created_by)
+                RETURNING id::text, department_id::text, code, name, description, schema_json, version, is_active, created_at;
+            """), {**data, "schema_json": json.dumps(data["schema_json"]), "created_by": created_by}).mappings().one()
+        return dict(row)
+
+    def create_clinical_form_response(self, data: dict[str, Any], recorded_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        if not recorded_by:
+            return None
+        with engine.begin() as conn:
+            template = conn.execute(text("""
+                SELECT id, version, schema_json FROM clinical_form_templates
+                WHERE id = CAST(:id AS UUID) AND is_active = TRUE FOR SHARE;
+            """), {"id": data["template_id"]}).mappings().first()
+            patient_pid, _ = _resolve_patient_pid(conn, data["patient_id"])
+            if not template or not patient_pid:
+                return None
+            if data.get("visit_id") and not _resolve_visit(conn, data["visit_id"]):
+                return None
+            if data.get("admission_id") and not conn.execute(text("SELECT id FROM admissions WHERE id = CAST(:id AS UUID)"), {"id": data["admission_id"]}).first():
+                return None
+            response = conn.execute(text("""
+                INSERT INTO clinical_form_responses (
+                    template_id, template_version, patient_id, visit_id, admission_id, recorded_by,
+                    status, response_json, finalized_at
+                ) VALUES (
+                    CAST(:template_id AS UUID), :template_version, :patient_id, CAST(:visit_id AS UUID),
+                    CAST(:admission_id AS UUID), :recorded_by, :status, CAST(:response_json AS JSONB),
+                    CASE WHEN :status = 'final' THEN NOW() ELSE NULL END
+                ) RETURNING id::text, template_id::text, template_version, patient_id, visit_id::text,
+                    admission_id::text, recorded_by, status, response_json, finalized_at, created_at;
+            """), {**data, "patient_id": patient_pid, "template_version": template["version"], "recorded_by": recorded_by, "response_json": json.dumps(data["response_json"])}).mappings().one()
+        return dict(response)
+
+    def list_clinical_form_responses(self, patient_id: str) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            patient_pid, _ = _resolve_patient_pid(conn, patient_id)
+            if not patient_pid:
+                return []
+            rows = conn.execute(text("""
+                SELECT r.id::text, r.template_id::text, r.template_version, r.patient_id,
+                    r.visit_id::text, r.admission_id::text, r.recorded_by, r.status,
+                    r.response_json, r.finalized_at, r.created_at, t.code AS template_code, t.name AS template_name
+                FROM clinical_form_responses r
+                JOIN clinical_form_templates t ON t.id = r.template_id
+                WHERE r.patient_id = :patient_id ORDER BY r.created_at DESC;
+            """), {"patient_id": patient_pid}).mappings().all()
+        return [dict(row) for row in rows]
+
+    def list_clinical_orders(self, patient_id: str) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            patient_pid, _ = _resolve_patient_pid(conn, patient_id)
+            if not patient_pid:
+                return []
+            rows = conn.execute(text("""
+                SELECT o.id::text, o.order_number, o.patient_id, o.visit_id::text, o.admission_id::text,
+                    o.order_type, o.priority, o.status, o.ordered_by, o.ordered_at, o.clinical_indication, o.notes,
+                    COALESCE(jsonb_agg(jsonb_build_object('id', i.id::text, 'name', i.name, 'status', i.status,
+                        'result_text', i.result_text) ORDER BY i.created_at) FILTER (WHERE i.id IS NOT NULL), '[]'::jsonb) AS items
+                FROM clinical_orders o LEFT JOIN clinical_order_items i ON i.order_id = o.id
+                WHERE o.patient_id = :patient_id GROUP BY o.id ORDER BY o.ordered_at DESC;
+            """), {"patient_id": patient_pid}).mappings().all()
+        return [dict(row) for row in rows]
+
+    def list_order_worklist(self, order_type: str) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT o.id::text, o.order_number, o.patient_id, o.visit_id::text, o.admission_id::text,
+                    o.order_type, o.priority, o.status, o.ordered_at,
+                    trim(concat_ws(' ', p.first_name, p.last_name)) AS patient_name,
+                    COALESCE(jsonb_agg(jsonb_build_object('id', i.id::text, 'name', i.name, 'item_code', i.item_code,
+                        'details_json', i.details_json, 'status', i.status) ORDER BY i.created_at)
+                        FILTER (WHERE i.id IS NOT NULL), '[]'::jsonb) AS items
+                FROM clinical_orders o JOIN patients p ON p.pid = o.patient_id
+                LEFT JOIN clinical_order_items i ON i.order_id = o.id
+                WHERE o.order_type = :order_type AND o.status NOT IN ('completed', 'cancelled')
+                GROUP BY o.id, p.first_name, p.last_name ORDER BY
+                    CASE o.priority WHEN 'stat' THEN 1 WHEN 'urgent' THEN 2 ELSE 3 END, o.ordered_at;
+            """), {"order_type": order_type}).mappings().all()
+        return [dict(row) for row in rows]
+
+    def create_clinical_order(self, data: dict[str, Any], ordered_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        if not ordered_by:
+            return None
+        with engine.begin() as conn:
+            patient_pid, _ = _resolve_patient_pid(conn, data["patient_id"])
+            if not patient_pid:
+                return None
+            if data.get("visit_id") and not _resolve_visit(conn, data["visit_id"]):
+                return None
+            if data.get("admission_id") and not conn.execute(text("SELECT id FROM admissions WHERE id = CAST(:id AS UUID)"), {"id": data["admission_id"]}).first():
+                return None
+            number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{secrets.token_hex(3).upper()}"
+            row = conn.execute(text("""
+                INSERT INTO clinical_orders (order_number, patient_id, visit_id, admission_id, order_type,
+                    priority, department_id, ordered_by, clinical_indication, notes)
+                VALUES (:number, :patient_id, CAST(:visit_id AS UUID), CAST(:admission_id AS UUID), :order_type,
+                    :priority, CAST(:department_id AS UUID), :ordered_by, :clinical_indication, :notes)
+                RETURNING id::text, order_number, patient_id, visit_id::text, admission_id::text, order_type,
+                    priority, status, ordered_by, ordered_at, clinical_indication, notes;
+            """), {**data, "number": number, "patient_id": patient_pid, "ordered_by": ordered_by}).mappings().one()
+            items = []
+            for item in data["items"]:
+                created = conn.execute(text("""
+                    INSERT INTO clinical_order_items (order_id, item_code, name, details_json)
+                    VALUES (CAST(:order_id AS UUID), :item_code, :name, CAST(:details_json AS JSONB))
+                    RETURNING id::text, item_code, name, details_json, status, created_at;
+                """), {**item, "order_id": row["id"], "details_json": json.dumps(item["details_json"])}).mappings().one()
+                items.append(dict(created))
+            conn.execute(text("""
+                INSERT INTO audit_events (actor_staff_id, action, entity_type, entity_id, patient_id, metadata)
+                VALUES (:actor, 'order.created', 'clinical_order', :id, :patient_id, jsonb_build_object('order_type', :order_type));
+            """), {"actor": ordered_by, "id": row["id"], "patient_id": patient_pid, "order_type": data["order_type"]})
+        return {**dict(row), "items": items}
+
+    def update_clinical_order_status(self, order_id: str, data: dict[str, Any], updated_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                UPDATE clinical_orders SET status = :status, updated_at = NOW(),
+                    cancelled_at = CASE WHEN :status = 'cancelled' THEN NOW() ELSE cancelled_at END,
+                    cancelled_by = CASE WHEN :status = 'cancelled' THEN :actor ELSE cancelled_by END,
+                    cancellation_reason = CASE WHEN :status = 'cancelled' THEN :reason ELSE cancellation_reason END
+                WHERE id = CAST(:id AS UUID) AND status NOT IN ('completed', 'cancelled')
+                RETURNING id::text, order_number, patient_id, status, cancelled_at, cancellation_reason, updated_at;
+            """), {"id": order_id, "status": data["status"], "reason": data.get("cancellation_reason"), "actor": updated_by}).mappings().first()
+        return dict(row) if row else None
+
+    def record_order_item_result(self, item_id: str, data: dict[str, Any], resulted_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                UPDATE clinical_order_items SET status = 'completed', result_text = :result_text,
+                    result_json = CAST(:result_json AS JSONB), resulted_by = :resulted_by, resulted_at = NOW(), updated_at = NOW()
+                WHERE id = CAST(:id AS UUID) AND status <> 'cancelled'
+                RETURNING id::text, order_id::text, item_code, name, status, result_text, result_json, resulted_by, resulted_at;
+            """), {"id": item_id, "result_text": data.get("result_text"), "result_json": json.dumps(data.get("result_json")) if data.get("result_json") is not None else None, "resulted_by": resulted_by}).mappings().first()
+            if not row:
+                return None
+            conn.execute(text("""
+                UPDATE clinical_orders SET status = 'completed', updated_at = NOW()
+                WHERE id = CAST(:order_id AS UUID)
+                  AND NOT EXISTS (SELECT 1 FROM clinical_order_items WHERE order_id = CAST(:order_id AS UUID) AND status NOT IN ('completed', 'cancelled'));
+            """), {"order_id": row["order_id"]})
+        return dict(row)
+
+    def dispense_medication(self, order_item_id: str, data: dict[str, Any], dispensed_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        if not dispensed_by:
+            return None
+        with engine.begin() as conn:
+            item = conn.execute(text("""
+                SELECT i.id FROM clinical_order_items i JOIN clinical_orders o ON o.id = i.order_id
+                WHERE i.id = CAST(:id AS UUID) AND o.order_type = 'medication'
+                  AND o.status NOT IN ('completed', 'cancelled') AND i.status <> 'cancelled';
+            """), {"id": order_item_id}).first()
+            if not item:
+                return None
+            row = conn.execute(text("""
+                INSERT INTO medication_dispenses (order_item_id, dispensed_by, quantity, unit, batch_number, expiry_date, notes)
+                VALUES (CAST(:order_item_id AS UUID), :dispensed_by, :quantity, :unit, :batch_number, :expiry_date, :notes)
+                RETURNING id::text, order_item_id::text, dispensed_by, quantity, unit, batch_number, expiry_date, status, dispensed_at, notes;
+            """), {**data, "order_item_id": order_item_id, "dispensed_by": dispensed_by}).mappings().one()
+        return dict(row)
+
+    def record_medication_administration(self, order_item_id: str, data: dict[str, Any], administered_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        if not administered_by:
+            return None
+        with engine.begin() as conn:
+            item = conn.execute(text("""
+                SELECT i.id, o.patient_id FROM clinical_order_items i JOIN clinical_orders o ON o.id = i.order_id
+                WHERE i.id = CAST(:id AS UUID) AND o.order_type = 'medication'
+                  AND o.status NOT IN ('completed', 'cancelled') AND i.status <> 'cancelled';
+            """), {"id": order_item_id}).mappings().first()
+            if not item:
+                return None
+            if data.get("dispense_id"):
+                valid_dispense = conn.execute(text("""
+                    SELECT id FROM medication_dispenses WHERE id = CAST(:dispense_id AS UUID)
+                    AND order_item_id = CAST(:order_item_id AS UUID) AND status = 'dispensed';
+                """), {"dispense_id": data["dispense_id"], "order_item_id": order_item_id}).first()
+                if not valid_dispense:
+                    return None
+            row = conn.execute(text("""
+                INSERT INTO medication_administrations (
+                    order_item_id, dispense_id, administered_by, scheduled_for, dose_quantity, dose_unit, route, status, reason, notes
+                ) VALUES (
+                    CAST(:order_item_id AS UUID), CAST(:dispense_id AS UUID), :administered_by, :scheduled_for,
+                    :dose_quantity, :dose_unit, :route, :status, :reason, :notes
+                ) RETURNING id::text, order_item_id::text, dispense_id::text, administered_by, scheduled_for,
+                    administered_at, dose_quantity, dose_unit, route, status, reason, notes;
+            """), {**data, "order_item_id": order_item_id, "administered_by": administered_by}).mappings().one()
+            conn.execute(text("""
+                INSERT INTO audit_events (actor_staff_id, action, entity_type, entity_id, patient_id, metadata)
+                VALUES (:actor, :action, 'medication_administration', :id, :patient_id, jsonb_build_object('order_item_id', :order_item_id));
+            """), {"actor": administered_by, "action": f"medication.{data['status']}", "id": row["id"], "patient_id": item["patient_id"], "order_item_id": order_item_id})
+        return dict(row)
+
+    def list_medication_administrations(self, order_item_id: str) -> list[dict[str, Any]]:
+        _require_conn()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT id::text, order_item_id::text, dispense_id::text, administered_by, scheduled_for,
+                    administered_at, dose_quantity, dose_unit, route, status, reason, notes
+                FROM medication_administrations WHERE order_item_id = CAST(:id AS UUID)
+                ORDER BY administered_at DESC;
+            """), {"id": order_item_id}).mappings().all()
+        return [dict(row) for row in rows]
+
+    def get_discharge_summary(self, admission_id: str) -> dict[str, Any] | None:
+        _require_conn()
+        with engine.connect() as conn:
+            row = conn.execute(text("""
+                SELECT id::text, admission_id::text, patient_id, authored_by, status, admission_diagnosis,
+                    discharge_diagnosis, hospital_course, procedures_performed, discharge_medications,
+                    follow_up_instructions, condition_at_discharge, created_at, updated_at, finalized_at
+                FROM discharge_summaries WHERE admission_id = CAST(:id AS UUID);
+            """), {"id": admission_id}).mappings().first()
+        return dict(row) if row else None
+
+    def upsert_discharge_summary(self, admission_id: str, data: dict[str, Any], authored_by: str | None) -> dict[str, Any] | None:
+        _require_conn()
+        if not authored_by:
+            return None
+        with engine.begin() as conn:
+            admission = conn.execute(text("SELECT patient_id FROM admissions WHERE id = CAST(:id AS UUID) AND status = 'admitted' FOR UPDATE"), {"id": admission_id}).mappings().first()
+            if not admission:
+                return None
+            finalize = bool(data.pop("finalize"))
+            current = conn.execute(text("SELECT id, status FROM discharge_summaries WHERE admission_id = CAST(:id AS UUID) FOR UPDATE"), {"id": admission_id}).mappings().first()
+            if current and current["status"] == "final":
+                return None
+            params = {**data, "admission_id": admission_id, "patient_id": admission["patient_id"], "authored_by": authored_by, "status": "final" if finalize else "draft"}
+            if current:
+                row = conn.execute(text("""
+                    UPDATE discharge_summaries SET authored_by = :authored_by, status = :status,
+                        admission_diagnosis = :admission_diagnosis, discharge_diagnosis = :discharge_diagnosis,
+                        hospital_course = :hospital_course, procedures_performed = :procedures_performed,
+                        discharge_medications = :discharge_medications, follow_up_instructions = :follow_up_instructions,
+                        condition_at_discharge = :condition_at_discharge, updated_at = NOW(),
+                        finalized_at = CASE WHEN :status = 'final' THEN NOW() ELSE NULL END
+                    WHERE admission_id = CAST(:admission_id AS UUID)
+                    RETURNING id::text, admission_id::text, patient_id, authored_by, status, discharge_diagnosis,
+                        hospital_course, discharge_medications, follow_up_instructions, finalized_at, updated_at;
+                """), params).mappings().one()
+            else:
+                row = conn.execute(text("""
+                    INSERT INTO discharge_summaries (admission_id, patient_id, authored_by, status,
+                        admission_diagnosis, discharge_diagnosis, hospital_course, procedures_performed,
+                        discharge_medications, follow_up_instructions, condition_at_discharge, finalized_at)
+                    VALUES (CAST(:admission_id AS UUID), :patient_id, :authored_by, :status,
+                        :admission_diagnosis, :discharge_diagnosis, :hospital_course, :procedures_performed,
+                        :discharge_medications, :follow_up_instructions, :condition_at_discharge,
+                        CASE WHEN :status = 'final' THEN NOW() ELSE NULL END)
+                    RETURNING id::text, admission_id::text, patient_id, authored_by, status, discharge_diagnosis,
+                        hospital_course, discharge_medications, follow_up_instructions, finalized_at, created_at;
+                """), params).mappings().one()
+            conn.execute(text("""
+                INSERT INTO audit_events (actor_staff_id, action, entity_type, entity_id, patient_id, metadata)
+                VALUES (:actor, :action, 'discharge_summary', :id, :patient_id, jsonb_build_object('admission_id', :admission_id));
+            """), {"actor": authored_by, "action": "discharge_summary.finalized" if finalize else "discharge_summary.saved", "id": row["id"], "patient_id": admission["patient_id"], "admission_id": admission_id})
+        return dict(row)
 
 
 store = DbStore()

@@ -37,8 +37,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-API_KEY         = os.environ.get("openai_key", "openai_key")
-HF_TOKEN        = os.environ.get("HF_TOKEN")
+API_KEY = os.environ.get("AI_ENGINE_TOKEN")
+ENABLE_DIARIZATION = os.environ.get("ASR_ENABLE_DIARIZATION", "false").lower() in {"1", "true", "yes"}
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:8000").split(",")
 
 
@@ -63,10 +63,14 @@ async def lifespan(app: FastAPI):
     mm.model.eval()
     logger.info("Whisper loaded ✓")
 
-    mm.diarizer = DiarizationPipeline.from_pretrained(
-        "pyannote/speaker-diarization-3.1"
-    ).to(torch.device(mm.device))
-    logger.info("pyannote diarizer loaded ✓")
+    if ENABLE_DIARIZATION:
+        mm.diarizer = DiarizationPipeline.from_pretrained(
+            "pyannote/speaker-diarization-3.1", local_files_only=True
+        ).to(torch.device(mm.device))
+        mm.diarization_enabled = True
+        logger.info("Local pyannote diarizer loaded ✓")
+    else:
+        logger.info("Speaker diarization disabled; using a single-speaker transcript")
 
     mm.model_loaded          = True
     app.state.model_manager  = mm         
@@ -75,7 +79,9 @@ async def lifespan(app: FastAPI):
     yield 
 
     logger.info("Shutting down...")
-    del mm.model, mm.processor, mm.diarizer
+    del mm.model, mm.processor
+    if mm.diarizer is not None:
+        del mm.diarizer
     if mm.device == "cuda":
         torch.cuda.empty_cache()
     logger.info("Shutdown complete.")
@@ -107,6 +113,8 @@ app.add_middleware(
 security = HTTPBearer()
 
 def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if not API_KEY:
+        raise HTTPException(status_code=503, detail="AI engine token is not configured")
     if credentials.credentials != API_KEY:
         logger.warning("Unauthorized access attempt")
         raise HTTPException(status_code=401, detail="Invalid API key")
@@ -114,9 +122,11 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 
 
 # Register routers 
-app.include_router(asr_router,dependencies=[Depends(verify_api_key)])
-app.include_router(nlp_router)
-app.include_router(rag_router)
+# The AI engine is an internal service.  Every inference endpoint requires the
+# backend service token; browsers never call this service directly.
+app.include_router(asr_router, dependencies=[Depends(verify_api_key)])
+app.include_router(nlp_router, dependencies=[Depends(verify_api_key)])
+app.include_router(rag_router, dependencies=[Depends(verify_api_key)])
 
 
 

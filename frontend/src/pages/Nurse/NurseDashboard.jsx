@@ -12,7 +12,6 @@ import {
 import WelcomeBanner from "../../components/WelcomeBanner";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { api } from "../../utils/api";
-import { supabase } from "../../utils/supabaseClient";
 
 export const NurseDashboard = () => {
   const userProfile = useUserProfile();
@@ -79,53 +78,16 @@ export const NurseDashboard = () => {
       setError("");
 
       try {
-        if (import.meta.env.CLINIQ_AUTH_MODE === "supabase") {
-          const { data: queueData, error: queueError } = await supabase
-            .from("nurse_triage_queue")
-            .select("*");
-
-          if (queueError) throw queueError;
-
-          const { data: recordsData, error: recordsError } = await supabase
-            .from("nurse_triage_records")
-            .select("*");
-
-          if (recordsError) throw recordsError;
-
-          const awaitingTriage = queueData.filter(
-            (p) => p.status === "awaiting_triage",
-          ).length;
-          const triagedCount = queueData.filter(
-            (p) => p.status === "triaged",
-          ).length;
-          const visitsEnded = recordsData.filter(
-            (r) => r.urgencyLevel === "normal",
-          ).length;
-
-          if (!mounted) return;
-          setStats({
-            totalPatientsToday: awaitingTriage + triagedCount + visitsEnded,
-            awaitingTriage,
-            awaitingConsultation: triagedCount,
-            visitsEnded,
-          });
-          if (!mounted) return;
-          setTriageQueue(Array.isArray(queueData) ? queueData : []);
-          if (!mounted) return;
-          setTriageRecords(Array.isArray(recordsData) ? recordsData : []);
-        } else {
-          const data = await api.get("/nurse/stats");
-          if (!mounted) return;
-          setStats(normalizeStats(data));
-          const [queueData, recordsData] = await Promise.all([
-            api.get("/nurse/triage-queue"),
-            api.get("/nurse/triage-records"),
-          ]);
-          if (!mounted) return;
-          setTriageQueue(Array.isArray(queueData) ? queueData : []);
-          if (!mounted) return;
-          setTriageRecords(Array.isArray(recordsData) ? recordsData : []);
-        }
+        const data = await api.get("/nurse/stats");
+        if (!mounted) return;
+        setStats(normalizeStats(data));
+        const [queueData, recordsData] = await Promise.all([
+          api.get("/nurse/triage-queue"),
+          api.get("/nurse/triage-records"),
+        ]);
+        if (!mounted) return;
+        setTriageQueue(Array.isArray(queueData) ? queueData : []);
+        setTriageRecords(Array.isArray(recordsData) ? recordsData : []);
       } catch (error) {
         if (!mounted) return;
         console.error("Nurse stats fetch failed", error);

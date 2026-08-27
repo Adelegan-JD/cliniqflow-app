@@ -28,17 +28,16 @@ def test_nlp_vitals_urgency_proxies(client, auth_headers_nurse):
 
 def test_ai_dose_check_proxies(client, auth_headers_doctor):
     canned = {
-        "safe": True,
-        "warnings": [],
-        "recommended_range_mg_per_day": {"min": 0, "max": 100},
-        "max_mg_per_day": 100,
-        "event_id": "e1",
-        "allow_override": True,
+        "safety_level": "safe",
+        "reasons": [],
+        "recommended_min_mgkg": 10,
+        "recommended_max_mgkg": 15,
+        "max_daily_mg": 100,
     }
     with patch(
         "app.services.ai_engine_client.post_json",
         return_value=canned,
-    ):
+    ) as post_json:
         r = client.post(
             "/ai/dose-check",
             headers=auth_headers_doctor,
@@ -52,3 +51,13 @@ def test_ai_dose_check_proxies(client, auth_headers_doctor):
         )
     assert r.status_code == 200
     assert r.json()["safe"] is True
+    post_json.assert_called_once_with(
+        "/rag/validate-dose",
+        {
+            "drug_name": "paracetamol",
+            "dose_mg": 30,
+            "frequency_per_day": 3,
+            "patient_weight_kg": 20,
+            "patient_age_years": 5,
+        },
+    )

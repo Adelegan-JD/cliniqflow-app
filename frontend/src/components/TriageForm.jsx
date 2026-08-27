@@ -121,27 +121,21 @@ export default function TriageForm({
 
       const localUrgency = localMap[ruleResult.level] || "normal";
 
-      if (import.meta.env.CLINIQ_AUTH_MODE === "supabase") {
-        setTriageStatus(localUrgency);
-        setTriageMethod("rule_based");
-      } else {
-        // non-supabase: also attempt backend NLP endpoint
-        const data = await api.post("/nlp/vitals-urgency", payload);
-        const normalized = data.urgency_level
-          ? data.urgency_level.toLowerCase()
-          : localUrgency;
-        const statusMap = {
-          red: "emergency",
-          yellow: "urgent",
-          green: "normal",
-          emergency: "emergency",
-          urgent: "urgent",
-          normal: "normal",
-          critical: "critical",
-        };
-        setTriageStatus(statusMap[normalized] || localUrgency);
-        setTriageMethod(data.method || "rule_based");
-      }
+      const data = await api.post("/nlp/vitals-urgency", payload);
+      const normalized = data.urgency_level
+        ? data.urgency_level.toLowerCase()
+        : localUrgency;
+      const statusMap = {
+        red: "emergency",
+        yellow: "urgent",
+        green: "normal",
+        emergency: "emergency",
+        urgent: "urgent",
+        normal: "normal",
+        critical: "critical",
+      };
+      setTriageStatus(statusMap[normalized] || localUrgency);
+      setTriageMethod(data.method || "rule_based");
     } catch (error) {
       console.error("Error fetching urgency level:", error);
       setTriageStatus("normal");

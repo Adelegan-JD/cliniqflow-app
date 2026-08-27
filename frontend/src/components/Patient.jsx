@@ -16,7 +16,7 @@ import {
   Type,
   Activity,
 } from "lucide-react";
-import { api } from "../utils/api";
+import { api, apiUrl } from "../utils/api";
 import { toast } from "react-toastify";
 
 const STEPS = ["transcript", "soap", "prescription", "save"];
@@ -109,7 +109,7 @@ const ConsultationRoom = ({ patient, onSave, onCancel }) => {
             setIsTranscribing(false);
             return;
           }
-          const r = await fetch("/translate/chunk", {
+          const r = await fetch(`${apiUrl}/translate/chunk`, {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
             body: form,
@@ -226,23 +226,18 @@ const ConsultationRoom = ({ patient, onSave, onCancel }) => {
     }
   };
 
-  const addPrescription = (skipCheck = false) => {
+  const addPrescription = () => {
     if (!newRx.drug_name.trim() || !newRx.dose_mg || !newRx.frequency) return;
     const doseMg = parseInt(newRx.dose_mg, 10);
     const freq = parseInt(newRx.frequency, 10);
     const duration = newRx.duration_days ? parseInt(newRx.duration_days, 10) : null;
-    const result = doseCheckResult || {
-      safe: true,
-      warnings: [],
-      recommended_range_mg_per_day: { min: 0, max: doseMg },
-      max_mg_per_day: doseMg,
-      event_id: "",
-      allow_override: true,
-    };
-    const isSafe = result.safe || skipCheck;
-    const needsOverride = !result.safe && !skipCheck;
+    const result = doseCheckResult;
+    // No result is not an implicitly safe result. The clinician may still
+    // proceed, but the decision is an override and needs a reason.
+    const isSafe = result?.safe === true;
+    const needsOverride = !isSafe;
     if (needsOverride && !overrideReason.trim()) {
-      toast.error("Please enter override reason");
+      toast.error("Please document the reason for this clinician override");
       return;
     }
     setPrescriptions((prev) => [
@@ -254,12 +249,12 @@ const ConsultationRoom = ({ patient, onSave, onCancel }) => {
         duration_days: duration,
         is_safe: isSafe,
         dose_check_result: {
-          safe: result.safe,
-          warnings: result.warnings || [],
-          recommended_range_mg_per_day: result.recommended_range_mg_per_day,
-          max_mg_per_day: result.max_mg_per_day,
+          safe: isSafe,
+          warnings: result?.warnings || ["Dose safety check was not completed."],
+          recommended_range_mg_per_day: result?.recommended_range_mg_per_day,
+          max_mg_per_day: result?.max_mg_per_day,
         },
-        override_reason: !result.safe && overrideReason.trim() ? overrideReason.trim() : null,
+        override_reason: needsOverride ? overrideReason.trim() : null,
       },
     ]);
     setNewRx({ drug_name: "", dose_mg: "", frequency: "", duration_days: "" });
@@ -569,6 +564,9 @@ const ConsultationRoom = ({ patient, onSave, onCancel }) => {
                 <Pill size={20} className="text-blue-500" />
                 Medication Prescription
               </h3>
+              <p className="text-sm text-slate-600 mb-4">
+                Dose Safety Advisory supports the prescribing doctor; it does not prescribe or replace clinical judgement.
+              </p>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
                 <input
                   type="text"
@@ -608,13 +606,13 @@ const ConsultationRoom = ({ patient, onSave, onCancel }) => {
                   {doseCheckLoading ? "Checking…" : "Check Dose Safety"}
                 </button>
                 <button
-                  onClick={() => addPrescription(true)}
+                  onClick={addPrescription}
                   disabled={!newRx.drug_name.trim() || !newRx.dose_mg || !newRx.frequency}
                   className="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 flex items-center gap-1"
-                  title="Add prescription without dose safety check (e.g. drug not in formulary)"
+                  title="Proceed without a completed check only with a documented clinician reason"
                 >
                   <Plus size={16} />
-                  Add without check
+                  Clinician override
                 </button>
                 {doseCheckResult && (
                   <>
@@ -630,7 +628,7 @@ const ConsultationRoom = ({ patient, onSave, onCancel }) => {
                       ) : (
                         <AlertTriangle size={16} />
                       )}
-                      {doseCheckResult.safe ? "Safe" : "Warning"}
+                      {doseCheckResult.safe ? "Within configured guardrails" : "Review required"}
                     </span>
                     {!doseCheckResult.safe && doseCheckResult.warnings?.length > 0 && (
                       <span className="text-sm text-amber-700">
@@ -638,23 +636,21 @@ const ConsultationRoom = ({ patient, onSave, onCancel }) => {
                       </span>
                     )}
                     <button
-                      onClick={() => addPrescription(false)}
+                      onClick={addPrescription}
                       className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 flex items-center gap-1"
                     >
                       <Plus size={16} />
-                      Add {doseCheckResult.safe ? "" : "(Override)"}
+                      Add {doseCheckResult.safe ? "" : "with override"}
                     </button>
-                    {!doseCheckResult.safe && (
-                      <input
-                        type="text"
-                        placeholder="Override reason"
-                        className="px-3 py-2 border border-slate-200 rounded-lg w-48"
-                        value={overrideReason}
-                        onChange={(e) => setOverrideReason(e.target.value)}
-                      />
-                    )}
                   </>
                 )}
+                <input
+                  type="text"
+                  placeholder="Reason required for an override or unchecked dose"
+                  className="px-3 py-2 border border-slate-200 rounded-lg min-w-64 flex-1"
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                />
               </div>
 
               {prescriptions.length > 0 && (
@@ -667,7 +663,7 @@ const ConsultationRoom = ({ patient, onSave, onCancel }) => {
                         className="flex justify-between items-center py-2 px-3 bg-slate-50 rounded-lg"
                       >
                         <span>
-                          <strong>{p.drug_name}</strong> — {p.dose_mg_per_day} mg/day, {p.frequency}x/day
+                          <strong>{p.drug_name}</strong> — {p.dose_mg_per_day} mg/day, {p.frequency_per_day}x/day
                           {p.duration_days && ` × ${p.duration_days} days`}
                           {!p.is_safe && (
                             <span className="ml-2 text-amber-600 text-xs">(Override)</span>

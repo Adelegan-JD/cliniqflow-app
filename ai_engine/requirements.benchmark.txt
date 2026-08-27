@@ -1,0 +1,5 @@
+# Minimal, CPU-capable offline benchmark runtime. This deliberately excludes
+# FastAPI, pyannote, and ffmpeg because the benchmark uses local WAV clips.
+transformers==4.40.0
+soundfile==0.13.1
+numpy>=2.4.4

@@ -59,9 +59,16 @@ logger = logging.getLogger(__name__)
 
 SAMPLE_RATE    = 16000
 MIN_DURATION_S = 0
-HF_TOKEN       = os.environ.get("HF_TOKEN")
-MODEL_ID       = "openai/whisper-small"
-CACHE_DIR      = os.environ.get("CACHE_DIR", "./model_cache")
+HF_TOKEN = os.environ.get("HF_TOKEN")
+# The default is intentionally the Yoruba fine-tune already downloaded for this
+# project.  It can be overridden for a different locally available model.
+MODEL_ID = os.environ.get("ASR_MODEL_ID", "LyngualLabs/whisper-small-yoruba")
+CACHE_DIR = os.environ.get("ASR_MODEL_PATH", "")
+HF_CACHE_DIR = os.environ.get(
+    "HF_HOME",
+    os.path.join(os.path.expanduser("~"), ".cache", "huggingface"),
+)
+OFFLINE_ONLY = os.environ.get("ASR_OFFLINE_ONLY", "true").lower() in {"1", "true", "yes"}
 
 
 # ModelManager 
@@ -77,12 +84,13 @@ class ModelManager:
     diarizer:     DiarizationPipeline             = None
     device:       str                             = None
     model_loaded: bool                            = False
+    diarization_enabled: bool                     = False
 
 
 # Model download helper 
 
 def download_model_if_needed() -> str:
-    """Returns local cache path. Downloads from HuggingFace only on first run."""
+    """Return a local model path, never downloading when offline mode is enabled."""
     required = [
         "config.json",
         "generation_config.json",
@@ -93,25 +101,46 @@ def download_model_if_needed() -> str:
         "merges.txt",
         "model.safetensors",
     ]
-    if all(os.path.exists(os.path.join(CACHE_DIR, f)) for f in required):
+    if CACHE_DIR and all(os.path.exists(os.path.join(CACHE_DIR, f)) for f in required):
         logger.info(f"Whisper model found in cache at {CACHE_DIR} — skipping download")
         return CACHE_DIR
+
+    repo_cache_name = "models--" + MODEL_ID.replace("/", "--")
+    snapshot_root = os.path.join(HF_CACHE_DIR, "hub", repo_cache_name, "snapshots")
+    if os.path.isdir(snapshot_root):
+        snapshots = [
+            os.path.join(snapshot_root, name)
+            for name in os.listdir(snapshot_root)
+            if os.path.isdir(os.path.join(snapshot_root, name))
+        ]
+        for snapshot in snapshots:
+            if all(os.path.exists(os.path.join(snapshot, f)) for f in required):
+                logger.info("Whisper model found in Hugging Face cache at %s", snapshot)
+                return snapshot
+
+    if OFFLINE_ONLY:
+        raise RuntimeError(
+            f"Offline ASR model '{MODEL_ID}' was not found. Set ASR_MODEL_PATH to a "
+            "complete local model directory or disable ASR_OFFLINE_ONLY to permit a download."
+        )
+
     logger.info(f"Downloading Whisper model: {MODEL_ID} (first run only)...")
-    os.makedirs(CACHE_DIR, exist_ok=True)
+    target_dir = CACHE_DIR or os.path.join("./model_cache", MODEL_ID.replace("/", "--"))
+    os.makedirs(target_dir, exist_ok=True)
     snapshot_download(
         repo_id=MODEL_ID,
-        local_dir=CACHE_DIR,
+        local_dir=target_dir,
         token=HF_TOKEN,
         allow_patterns=required,
     )
     logger.info(f"Download complete — saved to {CACHE_DIR}")
-    return CACHE_DIR
+    return target_dir
 
 
 
 def diarize_and_transcribe(audio: np.ndarray, manager: ModelManager) -> list:
     """
-    Run pyannote diarization then Whisper translation on each speaker segment.
+    Run optional pyannote diarization then Whisper transcription on each speaker segment.
 
     Args:
         audio:   mono float32 numpy array at 16 kHz
@@ -120,36 +149,21 @@ def diarize_and_transcribe(audio: np.ndarray, manager: ModelManager) -> list:
     Returns:
         List of {speaker, start, end, translation} dicts sorted by start time.
     """
-    logger.info("Running pyannote speaker diarization...")
-
-    waveform = torch.from_numpy(audio.astype(np.float32))
-    if waveform.dim() == 1:
-        waveform = waveform.unsqueeze(0)
-    waveform = waveform.to(manager.device)
-    audio_input = {"waveform": waveform, "sample_rate": SAMPLE_RATE}
-
-    diarization_output = manager.diarizer(audio_input)
-
-    if hasattr(diarization_output, "speaker_diarization"):
-        annotation = diarization_output.speaker_diarization
-    else:
-        annotation = diarization_output
-
     segments = []
-    for segment, _, speaker in annotation.itertracks(yield_label=True):
-        start_sample  = int(segment.start * SAMPLE_RATE)
-        end_sample    = int(segment.end   * SAMPLE_RATE)
-        speaker_audio = audio[start_sample:end_sample]
-
-        if len(speaker_audio) < SAMPLE_RATE * MIN_DURATION_S:
-            continue
-
-        segments.append({
-            "speaker": speaker,
-            "start":   round(segment.start, 2),
-            "end":     round(segment.end,   2),
-            "audio":   speaker_audio,
-        })
+    if manager.diarization_enabled and manager.diarizer is not None:
+        logger.info("Running local speaker diarization...")
+        waveform = torch.from_numpy(audio.astype(np.float32))
+        if waveform.dim() == 1:
+            waveform = waveform.unsqueeze(0)
+        waveform = waveform.to(manager.device)
+        annotation = manager.diarizer({"waveform": waveform, "sample_rate": SAMPLE_RATE})
+        annotation = getattr(annotation, "speaker_diarization", annotation)
+        for segment, _, speaker in annotation.itertracks(yield_label=True):
+            start_sample = int(segment.start * SAMPLE_RATE)
+            end_sample = int(segment.end * SAMPLE_RATE)
+            speaker_audio = audio[start_sample:end_sample]
+            if len(speaker_audio) >= SAMPLE_RATE * MIN_DURATION_S:
+                segments.append({"speaker": speaker, "start": round(segment.start, 2), "end": round(segment.end, 2), "audio": speaker_audio})
 
     logger.info(f"Diarization found {len(segments)} speaker segments")
 
@@ -178,7 +192,10 @@ def diarize_and_transcribe(audio: np.ndarray, manager: ModelManager) -> list:
         with torch.no_grad():
             predicted_ids = manager.model.generate(
                 input_features,
-                task="translate",
+                # Preserve the clinician's Yoruba/English utterance. Translation,
+                # if needed, must be a separate reviewed workflow rather than an
+                # implicit transformation of the medical record.
+                task="transcribe",
                 language=None,
                 max_new_tokens=256,
             )

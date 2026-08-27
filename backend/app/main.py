@@ -5,11 +5,17 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import (
     admin,
+    billing,
+    clinical_forms,
     consultation,
     doctor,
+    discharge,
     health,
+    hospital,
     nurse,
+    medications,
     orchestration,
+    orders,
     patients,
     record_officer,
     visits,
@@ -23,24 +29,31 @@ app = FastAPI(
     version="0.1.0",
 )
 
-#origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
-
-origins = [
-    "https://app.cliniq-flow.com", # Your live production frontend
-    "http://192.168.18.9:5173",    # Your Vite frontend IP
-    "http://localhost:5173",       # Localhost frontend
-]
+origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins= origins or ["*"],
+    # Empty configuration means cross-origin browsers are denied. Production
+    # origins are configured per environment, never hard-coded in source.
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+
+@app.on_event("startup")
+async def validate_runtime_configuration() -> None:
+    settings.validate_production()
 # "http://localhost:5173", "https://app.cliniq-flow.com" - origins for frontend on localhost and server
 
 app.include_router(health.router)
+app.include_router(hospital.router)
+app.include_router(billing.router)
+app.include_router(clinical_forms.router)
+app.include_router(orders.router)
+app.include_router(medications.router)
+app.include_router(discharge.router)
 app.include_router(admin.router)
 app.include_router(consultation.router)
 app.include_router(doctor.router)

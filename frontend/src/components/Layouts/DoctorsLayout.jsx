@@ -5,6 +5,9 @@ import {
   ListFilterIcon,
   ClipboardList,
   FileText,
+  BedDouble,
+  FileCheck2,
+  ClipboardPenLine,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useUserProfile } from "../../hooks/useUserProfile";
@@ -36,6 +39,24 @@ export default function DoctorsLayout() {
       icon: <FileText size={20} />,
       url: "/doctors-dashboard/records",
     },
+    {
+      id: "admissions",
+      label: "Admissions",
+      icon: <BedDouble size={20} />,
+      url: "/doctors-dashboard/admissions",
+    },
+    {
+      id: "discharges",
+      label: "Discharge Summaries",
+      icon: <FileCheck2 size={20} />,
+      url: "/doctors-dashboard/discharges",
+    },
+    {
+      id: "clinical-forms",
+      label: "Specialty Forms",
+      icon: <ClipboardPenLine size={20} />,
+      url: "/doctors-dashboard/clinical-forms",
+    },
   ];
 
   const location = useLocation();
@@ -55,6 +76,9 @@ export default function DoctorsLayout() {
       setActivePage("nurse_queue");
     else if (path.startsWith("/doctors-dashboard/records"))
       setActivePage("doctor-records");
+    else if (path.startsWith("/doctors-dashboard/admissions")) setActivePage("admissions");
+    else if (path.startsWith("/doctors-dashboard/discharges")) setActivePage("discharges");
+    else if (path.startsWith("/doctors-dashboard/clinical-forms")) setActivePage("clinical-forms");
   }, [location.pathname]);
 
   return (

@@ -83,6 +83,7 @@ class ValidateDoseResponse(BaseModel):
     recommended_max_mgkg: Optional[float]
     max_daily_mg: Optional[float]
     note: Optional[str]
+    evidence: List[RetrievalResult] = Field(default_factory=list)
     processing_time_ms: float
 
 
@@ -146,6 +147,28 @@ async def validate_dose(request: ValidateDoseRequest) -> ValidateDoseResponse:
             route=request.route,
         )
 
+        # Evidence is returned alongside the deterministic calculation so the
+        # clinician can see what source material was retrieved.  A retrieval
+        # failure must not turn a safety calculation into a false reassurance.
+        evidence: list[RetrievalResult] = []
+        try:
+            evidence = [
+                RetrievalResult(
+                    chunk_id=item.chunk_id,
+                    source=item.source,
+                    page=item.page,
+                    score=item.score,
+                    text=item.text,
+                    metadata=item.metadata,
+                )
+                for item in _get_rag_engine().retrieve(
+                    f"{request.drug_name} paediatric dose {request.route or ''}".strip(),
+                    top_k=3,
+                )
+            ]
+        except Exception as retrieval_error:
+            logger.warning("Dose evidence retrieval failed: %s", retrieval_error)
+
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         return ValidateDoseResponse(
@@ -163,6 +186,7 @@ async def validate_dose(request: ValidateDoseRequest) -> ValidateDoseResponse:
             recommended_max_mgkg=result.recommended_max_mgkg,
             max_daily_mg=result.max_daily_mg,
             note=result.note,
+            evidence=evidence,
             processing_time_ms=round(elapsed_ms, 2),
         )
 

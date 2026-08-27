@@ -13,8 +13,11 @@ load_dotenv(env_path)
 url = os.environ.get("SUPABASE_URL")
 key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
-if not url or not key:
-	raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables (checked backend/.env)")
+supabase_admin = create_client(url, key) if url and key else None  # type: ignore
 
-# Initialize the Admin Client
-supabase_admin = create_client(url, key)  # type: ignore
+
+def require_supabase_admin():
+	"""Return the privileged client only when an admin provisioning action needs it."""
+	if supabase_admin is None:
+		raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables (checked backend/.env)")
+	return supabase_admin

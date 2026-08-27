@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Clock,
   CheckCircle2,
+  BedDouble,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useUserProfile } from "../../hooks/useUserProfile";
@@ -38,6 +39,12 @@ export default function NurseLayout() {
       url: "/nurse-dashboard/records",
     },
     {
+      id: "inpatient-care",
+      label: "Inpatient Care",
+      icon: <BedDouble size={20} />,
+      url: "/nurse-dashboard/inpatient-care",
+    },
+    {
       id: "help",
       label: "Help & Support",
       icon: <HelpCircle size={20} />,
@@ -57,6 +64,7 @@ export default function NurseLayout() {
       setActivePage("nurse-triage-results");
     else if (path.startsWith("/nurse-dashboard/records"))
       setActivePage("nurse-records");
+    else if (path.startsWith("/nurse-dashboard/inpatient-care")) setActivePage("inpatient-care");
     else if (path.startsWith("/nurse-dashboard/help")) setActivePage("help");
   }, [location.pathname]);
 

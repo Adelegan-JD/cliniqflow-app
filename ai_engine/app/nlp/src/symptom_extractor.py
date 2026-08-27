@@ -9,15 +9,11 @@ Uses a hybrid approach:
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 from dotenv import load_dotenv
-from openai import OpenAI
-from openai import OpenAI
 load_dotenv()  # Load environment variables from .env file
 
 
@@ -244,7 +240,7 @@ class RuleBasedExtractor:
 # LLM-based extractor
 
 class LLMExtractor:
-    """OpenAI API to extract structured data from transcript."""
+    """Compatibility shim: clinical extraction is deliberately offline-only."""
 
     SYSTEM_PROMPT = """You are a clinical NLP assistant working in a Nigerian paediatric primary healthcare context.
 Extract structured clinical information from the transcript provided.
@@ -294,66 +290,10 @@ Transcript:
 {transcript}"""
 
     def __init__(self) -> None:
-        self.api_key = os.getenv("OPENAI_API_KEY", "")
-        self.enabled = bool(self.api_key)
-        if not self.enabled:
-            logger.warning("OPENAI_API_KEY not set — LLM extraction disabled, using rule-based only")
-        
-        # Initialize official OpenAI client
-        if self.enabled:
-            self.client = OpenAI(api_key=self.api_key)
+        self.enabled = False
 
     def extract(self, transcript: str) -> Optional[Dict[str, Any]]:
-        if not self.enabled:
-            return None
-
-        prompt = self.EXTRACTION_PROMPT.format(transcript=transcript)
-
-        try:
-            # Using SDK instead of raw HTTP request for better error handling and retries
-            response = self.client.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": self.SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=2000,
-            )
-
-            raw_text = response.choices[0].message.content.strip()
-
-            # response = httpx.post(
-            #     OPENAI_API_URL,
-            #     headers={
-            #         "Authorization": f"Bearer {self.api_key}",
-            #         "Content-Type": "application/json",
-            #     },
-            #     json={
-            #         "model": OPENAI_MODEL,
-            #         "max_tokens": 2000,
-            #         "messages": [
-            #             {"role": "system", "content": self.SYSTEM_PROMPT},
-            #             {"role": "user", "content": prompt}
-            #         ],
-            #         "temperature": 0.7,
-            #     },
-            #     timeout=30.0,
-            # )
-            # response.raise_for_status()
-            # data = response.json()
-            # raw_text = data["choices"][0]["message"]["content"].strip()
-
-            # Strip markdown code fences if present
-            if raw_text.startswith("```"):
-                raw_text = re.sub(r"^```(?:json)?\n?", "", raw_text)
-                raw_text = re.sub(r"\n?```$", "", raw_text)
-
-            return json.loads(raw_text)
-
-        except Exception as e:
-            logger.error(f"LLM extraction failed: {e}")
-            return None
+        return None
 
 
 

@@ -21,8 +21,7 @@ This service is a decision-support tool. It organizes and flags clinical informa
 
 - Extraction methods
   - Rule-based extraction for speed and deterministic behavior
-  - Optional LLM extraction when `OPENAI_API_KEY` is set
-  - Hybrid merge with confidence-aware fallback to rule-based results
+  - Offline rule-based extraction with confidence-aware warnings
 - Structured outputs
   - Demographics include height and auto-calculated BMI
   - Symptoms include onset, location, and modifiers when present
@@ -63,20 +62,22 @@ RAG
 
 ## Authentication
 
-ASR endpoints require a Bearer token. The token value comes from the `openai_key` environment variable.
+All AI inference endpoints (ASR, NLP and RAG) require a Bearer token. The token value comes from the `AI_ENGINE_TOKEN` environment variable; it is an internal service token, not an OpenAI key. The browser must call the backend only; the backend forwards this token to the AI engine.
 
 Example header:
 
 ```
-Authorization: Bearer <openai_key>
+Authorization: Bearer <AI_ENGINE_TOKEN>
 ```
-NLP and RAG endpoints currently do not require a token in this service.
+Do not expose the AI-engine port publicly in production.
 
 ## Environment variables
 
-- openai_key: API key used to authorize ASR requests (required for ASR)
-- OPENAI_API_KEY: optional key for LLM-based symptom extraction
-- HF_TOKEN: Hugging Face token required for pyannote diarization models
+- AI_ENGINE_TOKEN: token used to authorize ASR requests (required for ASR)
+- ASR_MODEL_ID: model identifier (defaults to `LyngualLabs/whisper-small-yoruba`)
+- ASR_MODEL_PATH: optional path to a complete local model directory
+- ASR_OFFLINE_ONLY: prevents Hugging Face downloads when `true` (the default)
+- ASR_ENABLE_DIARIZATION: enables pyannote only when it is already cached locally
 
 
 ## Example requests
@@ -176,7 +177,7 @@ uvicorn main:app --reload --port 8001
 ```
 
 Notes:
-- First run may download Whisper and pyannote models.
+- The default Yoruba Whisper model must be available locally; offline mode never downloads it.
 - GPU is used automatically if available; otherwise CPU is used.
 
 ## Testing
@@ -187,6 +188,7 @@ pytest
 
 ## Troubleshooting
 
-- If ASR requests return 401, confirm `openai_key` is set and the Bearer token matches.
-- If diarization fails, verify `HF_TOKEN` is set and has access to required models.
-- If LLM extraction is disabled, set `OPENAI_API_KEY` (rule-based extraction still works).
+- If ASR requests return 401 or 503, confirm `AI_ENGINE_TOKEN` is set and the Bearer token matches.
+- If NLP or RAG requests return 401, confirm they are being made by the backend with the configured internal service token.
+- If startup says the model is missing, set `ASR_MODEL_PATH` to the cached Yoruba model snapshot.
+- Diarization is disabled by default so transcription remains fully offline.

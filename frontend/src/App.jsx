@@ -21,6 +21,14 @@ import PatientsQueue from "./pages/Doctor/PatientsQueue";
 import NurseQueueAwareness from "./pages/Doctor/NurseQueueAwareness";
 import RecordingSession from "./pages/Doctor/RecordingSession";
 import Soap from "./pages/Doctor/Soap";
+import Admissions from "./pages/Doctor/Admissions";
+import DischargeSummaries from "./pages/Doctor/DischargeSummaries";
+import ClinicalForms from "./pages/Doctor/ClinicalForms";
+import PharmacyLayout from "./components/Layouts/PharmacyLayout";
+import MedicationWorklist from "./pages/Pharmacy/MedicationWorklist";
+import BillingLayout from "./components/Layouts/BillingLayout";
+import BillingWorkspace from "./pages/Billing/BillingWorkspace";
+import ClinicalTemplates from "./pages/Admin/ClinicalTemplates";
 import Home from "./pages/Home";
 // import RecordOfficerDasboard from "./pages/RecordOfficerDasboard";
 // import DoctorsDashboard from "./pages/DoctorsDashboard";
@@ -30,6 +38,7 @@ import { Settings } from "./pages/Admin/Settings";
 import { Help } from "./pages/Admin/Help";
 import NurseLayout from "./components/Layouts/NurseLayout";
 import { NurseDashboard } from "./pages/Nurse/NurseDashboard";
+import InpatientCare from "./pages/Nurse/InpatientCare";
 import NurseTriage from "./pages/Nurse/NurseTriage";
 import TriageQueue from "./pages/Nurse/TriageQueue";
 import TriageRecords from "./pages/Nurse/TriageRecords";
@@ -46,6 +55,8 @@ const getRoleBasedRoute = (role) => {
     nurse: "/nurse-dashboard",
     record_officer: "/record-officer",
     doctor: "/doctors-dashboard",
+    pharmacist: "/pharmacy",
+    billing_officer: "/billing",
   };
   return roleRoutes[role] || null;
 };
@@ -110,6 +121,8 @@ function App() {
       else if (role === "doctor") dest = "/doctors-dashboard";
       else if (role === "record_officer" || role === "record officer")
         dest = "/record-officer";
+      else if (role === "pharmacist") dest = "/pharmacy";
+      else if (role === "billing_officer") dest = "/billing";
       const path = location.pathname;
       const allowed = path === dest || path.startsWith(dest + "/");
       if (!allowed) {
@@ -197,6 +210,8 @@ function App() {
               <Route path="/dashboard/users" element={<Users />} />
               <Route path="/dashboard/records" element={<Records />} />
               <Route path="/dashboard/settings" element={<Settings />} />
+              <Route path="/dashboard/payments" element={<BillingWorkspace admin />} />
+              <Route path="/dashboard/clinical-templates" element={<ClinicalTemplates />} />
               <Route path="/dashboard/help" element={<Help />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Route>
@@ -213,6 +228,7 @@ function App() {
               <Route path="triage-queue" element={<TriageQueue />} />
               <Route path="triage-results" element={<TriageRecords />} />
               <Route path="records" element={<RecordOfficerRecords />} />
+              <Route path="inpatient-care" element={<InpatientCare />} />
               <Route path="triage/:patientId" element={<NurseTriage />} />
               <Route path="help" element={<NurseHelp />} />
             </Route>
@@ -243,6 +259,9 @@ function App() {
             >
               <Route index element={<DoctorsDashboard />} />
               <Route path="records" element={<RecordOfficerRecords />} />
+              <Route path="admissions" element={<Admissions />} />
+              <Route path="discharges" element={<DischargeSummaries />} />
+              <Route path="clinical-forms" element={<ClinicalForms />} />
               <Route path="patients_queue" element={<PatientsQueue />} />
               <Route path="nurse-queue" element={<NurseQueueAwareness />} />
               {/* Nurse triage results view removed for doctors */}
@@ -255,6 +274,12 @@ function App() {
                 path="*"
                 element={<Navigate to="/doctors-dashboard" replace />}
               />
+            </Route>
+            <Route path="/pharmacy" element={<RoleProtectedRoute allowedRoles={["pharmacist"]}><PharmacyLayout /></RoleProtectedRoute>}>
+              <Route index element={<MedicationWorklist />} />
+            </Route>
+            <Route path="/billing" element={<RoleProtectedRoute allowedRoles={["billing_officer"]}><BillingLayout /></RoleProtectedRoute>}>
+              <Route index element={<BillingWorkspace />} />
             </Route>
           </Route>
         </Routes>

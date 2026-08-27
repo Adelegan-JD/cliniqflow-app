@@ -58,6 +58,7 @@ class HealthResponse(BaseModel):
     status:       str
     model_loaded: bool
     device:       str
+    diarization_enabled: bool
 
 
 # ── Audio loader ───────────────────────────────────────────────────────────────
@@ -96,6 +97,7 @@ async def asr_health(request: Request):
         status="ready" if mm.model_loaded else "loading",
         model_loaded=mm.model_loaded,
         device=mm.device or "unknown",
+        diarization_enabled=mm.diarization_enabled,
     )
 
 
