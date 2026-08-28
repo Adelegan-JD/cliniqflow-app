@@ -1,0 +1,26 @@
+# Fly.io deployment definition for the compact, offline AI engine.
+# Create the app with a unique name before the first deploy.
+app = "cliniqflow-ai"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ASR_MODEL_PATH = "/opt/models/yoruba-whisper-small-ct2"
+  ASR_DEVICE = "cpu"
+  ASR_COMPUTE_TYPE = "int8"
+  ASR_ENABLE_DIARIZATION = "false"
+
+[http_service]
+  internal_port = 8001
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
