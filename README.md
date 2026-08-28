@@ -76,3 +76,4 @@ deployment-ready until every listed staging check has evidence of completion.
 - The app currently has legacy direct-Supabase nurse screens; move those remaining reads/writes behind the backend before production.
 
 Deployment configuration updated.
+CORS deployment trigger.
