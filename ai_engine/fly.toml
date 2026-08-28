@@ -1,26 +1,22 @@
-# Fly.io deployment definition for the compact, offline AI engine.
-# Create the app with a unique name before the first deploy.
-app = "cliniqflow-ai"
-primary_region = "lhr"
+# fly.toml app configuration file generated for ai-engine-polished-moonrise-4377 on 2026-08-28T20:18:14+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'ai-engine-polished-moonrise-4377'
+primary_region = 'lhr'
 
 [build]
-  dockerfile = "Dockerfile"
-
-[env]
-  ASR_MODEL_PATH = "/opt/models/yoruba-whisper-small-ct2"
-  ASR_DEVICE = "cpu"
-  ASR_COMPUTE_TYPE = "int8"
-  ASR_ENABLE_DIARIZATION = "false"
-
 [http_service]
   internal_port = 8001
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
+  processes = ['app']
 
 [[vm]]
-  memory = "1gb"
-  cpu_kind = "shared"
+  memory = '1gb'
+  cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 1024
