@@ -3,27 +3,6 @@ import { supabase } from "./supabaseClient";
 
 export const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-// Cache session info to avoid repeated calls to getSession()
-let cachedSession = null;
-let cachedRole = null;
-let sessionCacheTime = 0;
-const SESSION_CACHE_TTL = 30000; // Cache for 30 seconds
-
-// Listen for auth state changes and update cache
-if (typeof window !== "undefined") {
-  supabase.auth.onAuthStateChange((event, session) => {
-    cachedSession = session;
-    sessionCacheTime = Date.now();
-    if (session?.user) {
-      // Roles are administrator-controlled. User metadata is editable by the
-      // account holder and must never influence authorization behaviour.
-      cachedRole = session.user.app_metadata?.role || null;
-    } else {
-      cachedRole = null;
-    }
-  });
-}
-
 const buildAuthHeaders = async () => {
   const token = await getToken();
   if (!token) {
@@ -34,28 +13,6 @@ const buildAuthHeaders = async () => {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
-
-  // Use cached role if fresh, otherwise refresh from session
-  // This reduces lock contention by batching getSession() calls
-  let role = cachedRole;
-  if (!role || Date.now() - sessionCacheTime > SESSION_CACHE_TTL) {
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.user) {
-        role = session.user.app_metadata?.role || null;
-        cachedRole = role;
-        sessionCacheTime = Date.now();
-      }
-    } catch (e) {
-      console.debug("Could not extract role from Supabase session:", e);
-    }
-  }
-
-  if (role) {
-    headers["X-Debug-Role"] = role;
-  }
 
   return headers;
 };
