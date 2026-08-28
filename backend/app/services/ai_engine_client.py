@@ -3,7 +3,7 @@
 from typing import Any
 
 import httpx
-from fastapi import HTTPException, status
+from fastapi import HTTPException, 
 
 from app.core.config import settings
 
