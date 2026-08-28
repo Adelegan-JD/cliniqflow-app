@@ -74,3 +74,5 @@ deployment-ready until every listed staging check has evidence of completion.
 - Clinical leadership must approve every dosage rule, source document, alert threshold, and override policy.
 - Deploy HTTPS, managed secrets, encrypted backups, least-privilege database roles, MFA, session expiry, immutable audit retention, and tested disaster recovery.
 - The app currently has legacy direct-Supabase nurse screens; move those remaining reads/writes behind the backend before production.
+
+Deployment configuration updated.
