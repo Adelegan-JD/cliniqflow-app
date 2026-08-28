@@ -90,6 +90,9 @@ RUN ct2-transformers-converter \
     --model LyngualLabs/whisper-small-yoruba \
     --output_dir /opt/models/yoruba-whisper-small-ct2 \
     --quantization int8
+# faster-whisper otherwise fetches the common Whisper tokenizer at startup.
+# Bundle it with the converted model so runtime operation stays fully offline.
+RUN python -c "from huggingface_hub import hf_hub_download; from shutil import copyfile; copyfile(hf_hub_download('openai/whisper-tiny', 'tokenizer.json'), '/opt/models/yoruba-whisper-small-ct2/tokenizer.json')"
 
 # Use an official lightweight Python image
 FROM python:3.11-slim-bookworm

@@ -59,7 +59,10 @@ def transcribe_file(audio_path: str, manager: ModelManager) -> list[dict]:
         task="transcribe",
         language=None,
         beam_size=5,
-        vad_filter=True,
+        # The optional Silero VAD model downloads lazily on first use. Keep the
+        # deployed clinical engine strictly offline; recording duration limits
+        # and clinician review handle empty/poor-quality recordings instead.
+        vad_filter=False,
         condition_on_previous_text=False,
     )
     results: list[dict] = []
