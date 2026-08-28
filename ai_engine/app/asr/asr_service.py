@@ -1,8 +1,7 @@
-import numpy as np
 from app.asr.asr_engine import (
     ModelManager,
-    diarize_and_transcribe,
     format_conversation,
+    transcribe_file,
 )
 
 
@@ -19,7 +18,7 @@ class ASRService:
         """Return True once Whisper + pyannote are fully loaded."""
         return self.manager.model_loaded
 
-    def transcribe(self, audio: np.ndarray) -> list:
+    def transcribe(self, audio_path: str) -> list:
         """
         Run speaker diarization + Whisper translation on a numpy audio array.
 
@@ -31,7 +30,7 @@ class ASRService:
         """
         if not self.is_ready():
             raise RuntimeError("Models are not loaded yet. Wait for server startup.")
-        return diarize_and_transcribe(audio, self.manager)
+        return transcribe_file(audio_path, self.manager)
 
     def format(self, segments: list) -> str:
         """
@@ -40,7 +39,7 @@ class ASRService:
         """
         return format_conversation(segments)
 
-    def transcribe_and_format(self, audio: np.ndarray) -> dict:
+    def transcribe_and_format(self, audio_path: str) -> dict:
         """
         Convenience method: transcribe and return both the raw segments
         and the formatted conversation string in one call.
@@ -51,7 +50,7 @@ class ASRService:
                 "conversation": "SPEAKER_00 [0.5s–8.2s]: ..."
             }
         """
-        segments = self.transcribe(audio)
+        segments = self.transcribe(audio_path)
         return {
             "segments":     segments,
             "conversation": self.format(segments),

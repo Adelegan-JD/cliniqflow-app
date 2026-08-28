@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Menu, X, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import { Menu, X, ChevronLeft, ChevronRight, LogOut, UserRound } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import { Link, NavLink } from "react-router";
 import { useAdminStore } from "../store/adminStore";
@@ -147,18 +147,8 @@ const Sidebar = ({
       ${isExpanded ? "hover:bg-white hover:shadow-sm" : "justify-center"}
     `}
             >
-              {/* Avatar Section */}
-              <div className="relative shrink-0">
-                <img
-                  src={
-                    userProfile?.avatar ||
-                    "https://ui-avatars.com/api/?name=User&background=random"
-                  }
-                  alt="Avatar"
-                  className="w-10 h-10 rounded-xl object-cover ring-2 ring-white shadow-sm"
-                />
-                {/* Online Status Indicator */}
-                <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-white"></span>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-700">
+                <UserRound size={19} aria-hidden="true" />
               </div>
 
               {/* Text Info - Smooth Expansion */}

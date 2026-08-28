@@ -82,6 +82,15 @@
 
 # CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
 
+# Convert the approved Hugging Face checkpoint during image build.  The final
+# runtime image does not contain PyTorch, Transformers, or Hugging Face tools.
+FROM python:3.11-slim-bookworm AS model-converter
+RUN pip install --no-cache-dir ctranslate2==4.6.2 transformers==4.49.0 torch==2.6.0
+RUN ct2-transformers-converter \
+    --model LyngualLabs/whisper-small-yoruba \
+    --output_dir /opt/models/yoruba-whisper-small-ct2 \
+    --quantization int8
+
 # Use an official lightweight Python image
 FROM python:3.11-slim-bookworm
 
@@ -105,6 +114,8 @@ COPY requirements.txt .
 
 # Install all Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+
+COPY --from=model-converter /opt/models/yoruba-whisper-small-ct2 /opt/models/yoruba-whisper-small-ct2
 
 # Copy the rest of the application code
 COPY . .

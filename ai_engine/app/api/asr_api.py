@@ -15,8 +15,6 @@ import tempfile
 import time
 import uuid
 
-import librosa
-import numpy as np
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -63,8 +61,8 @@ class HealthResponse(BaseModel):
 
 # ── Audio loader ───────────────────────────────────────────────────────────────
 
-def _load_audio(file: UploadFile) -> np.ndarray:
-    """Validate, read, and resample uploaded audio to mono float32 at 16 kHz."""
+def _save_audio_upload(file: UploadFile) -> tuple[str, int]:
+    """Validate an upload and save it temporarily for the ASR decoder."""
     content_type = (file.content_type or "").split(";")[0].strip().lower()
     if content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=415, detail=f"Unsupported file type: {file.content_type}")
@@ -73,18 +71,11 @@ def _load_audio(file: UploadFile) -> np.ndarray:
     if len(contents) > MAX_FILE_MB * 1024 * 1024:
         raise HTTPException(status_code=413, detail=f"File exceeds {MAX_FILE_MB} MB limit")
 
-    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+    suffix = os.path.splitext(file.filename or "recording.webm")[1] or ".webm"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(contents)
         tmp_path = tmp.name
-
-    try:
-        audio, _ = librosa.load(tmp_path, sr=SAMPLE_RATE, mono=True)
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Could not decode audio: {e}")
-    finally:
-        os.unlink(tmp_path)
-
-    return audio
+    return tmp_path, len(contents)
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -126,10 +117,14 @@ async def transcribe(
     logger.info(f"[{session_id}] Transcription request — file: {file.filename}")
     t0 = time.time()
 
-    audio    = _load_audio(file)
-    duration = round(len(audio) / SAMPLE_RATE, 2)
-
-    result = service.transcribe_and_format(audio)
+    audio_path, _size = _save_audio_upload(file)
+    try:
+        result = service.transcribe_and_format(audio_path)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=f"Could not transcribe audio: {exc}") from exc
+    finally:
+        os.unlink(audio_path)
+    duration = round(max((segment["end"] for segment in result["segments"]), default=0.0), 2)
 
     logger.info(
         f"[{session_id}] Done — {len(result['segments'])} segments, "

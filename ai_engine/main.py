@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from app.asr.asr_engine import (
     ModelManager,
-    download_model_if_needed,
+    load_model,
 )
 
 # Standard imports 
@@ -12,16 +12,13 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-import torch
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pyannote.audio import Pipeline as DiarizationPipeline
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 # API routers 
 from app.api.asr_api       import router as asr_router
@@ -48,42 +45,17 @@ async def lifespan(app: FastAPI):
     logger.info("Server starting up...")
     t0 = time.time()
 
-    mm        = ModelManager()
-    mm.device = "cuda" if torch.cuda.is_available() else "cpu"
-    logger.info(f"Device: {mm.device}")
-
-    local_path = download_model_if_needed()
-
-    mm.processor = WhisperProcessor.from_pretrained(local_path, local_files_only=True)
-    mm.model = WhisperForConditionalGeneration.from_pretrained(
-        local_path,
-        local_files_only=True,
-        torch_dtype=torch.float16 if mm.device == "cuda" else torch.float32,
-    ).to(mm.device)
-    mm.model.eval()
-    logger.info("Whisper loaded ✓")
-
     if ENABLE_DIARIZATION:
-        mm.diarizer = DiarizationPipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1", local_files_only=True
-        ).to(torch.device(mm.device))
-        mm.diarization_enabled = True
-        logger.info("Local pyannote diarizer loaded ✓")
-    else:
-        logger.info("Speaker diarization disabled; using a single-speaker transcript")
-
-    mm.model_loaded          = True
+        logger.warning("ASR_ENABLE_DIARIZATION is ignored in the compact production runtime")
+    mm = load_model()
+    logger.info("Speaker diarization disabled; using a single-speaker transcript")
     app.state.model_manager  = mm         
     logger.info(f"Ready in {round(time.time()-t0, 2)}s")
 
     yield 
 
     logger.info("Shutting down...")
-    del mm.model, mm.processor
-    if mm.diarizer is not None:
-        del mm.diarizer
-    if mm.device == "cuda":
-        torch.cuda.empty_cache()
+    del mm.model
     logger.info("Shutdown complete.")
 
 

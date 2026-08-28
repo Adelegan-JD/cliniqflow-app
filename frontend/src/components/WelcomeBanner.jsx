@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Clock, Calendar } from "lucide-react";
+import { Clock3, CalendarDays, ShieldCheck } from "lucide-react";
 
 const WelcomeBanner = ({ user }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -23,46 +23,33 @@ const WelcomeBanner = ({ user }) => {
   const timeOptions = { hour: "2-digit", minute: "2-digit" };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
-      {/* Left Side: User Info */}
-      <div className="flex items-center gap-4 w-full md:w-auto">
-        <div className="relative">
-          <img
-            src={user?.avatar || "https://via.placeholder.com/150"}
-            alt={user?.name}
-            className="w-16 h-16 rounded-full object-cover border-4 border-blue-50"
-          />
-          <span className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></span>
+    <section className="mb-7 flex flex-col justify-between gap-5 rounded-lg border border-slate-200 bg-white px-6 py-5 shadow-sm md:flex-row md:items-center">
+      <div className="flex items-center gap-4">
+        <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-950 text-white">
+          <ShieldCheck size={22} aria-hidden="true" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">
-            Welcome back, {user?.name?.split(" ")[0] || "User"}! 👋
-          </h2>
-          <p className="text-gray-500 text-sm font-medium bg-gray-100 px-2 py-0.5 rounded inline-block mt-1">
-            {user?.role}
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Clinical operations</p>
+          <h2 className="mt-1 text-xl font-semibold text-slate-900">{user?.name || "Staff workspace"}</h2>
+          <p className="mt-1 text-sm text-slate-500">{user?.role || "Authenticated staff member"}</p>
         </div>
       </div>
 
-      {/* Right Side: Date & Time */}
-      <div className="flex flex-col items-end gap-1 w-full md:w-auto text-right">
-        {/* Date Display */}
-        <div className="flex items-center gap-2 text-gray-500">
-          <Calendar size={16} className="text-blue-500" />
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 border-t border-slate-100 pt-4 text-right md:border-l md:border-t-0 md:pl-6 md:pt-0">
+        <div className="flex items-center justify-end gap-2 text-slate-500">
+          <CalendarDays size={15} aria-hidden="true" />
           <span className="text-sm font-medium">
             {currentDate.toLocaleDateString("en-US", dateOptions)}
           </span>
         </div>
-
-        {/* Time Display */}
-        <div className="flex items-center gap-2 text-gray-800">
-          <Clock size={20} className="text-blue-600" />
-          <span className="text-3xl font-bold tracking-tight">
+        <div className="flex items-center justify-end gap-2 text-slate-900">
+          <Clock3 size={16} className="text-blue-800" aria-hidden="true" />
+          <span className="text-base font-semibold tabular-nums">
             {currentDate.toLocaleTimeString("en-US", timeOptions)}
           </span>
         </div>
       </div>
-    </div>
+    </section>
   );
 };
 
