@@ -191,8 +191,7 @@ export const NurseDashboard = () => {
               Nurse Dashboard
             </h1>
             <p className="text-gray-600 mt-1">
-              Welcome {userProfile?.name || "Nurse"}, here's your triage
-              overview.
+              Review waiting patients, triage activity and priority alerts.
             </p>
           </div>
         </div>

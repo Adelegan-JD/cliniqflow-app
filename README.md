@@ -15,11 +15,11 @@ It supports clinicians; it does not diagnose, prescribe automatically, or replac
 
 ## AI decision support
 
-1. **Offline Yoruba/English transcription.** The AI engine defaults to the locally cached `LyngualLabs/whisper-small-yoruba` model. It runs offline when `ASR_OFFLINE_ONLY=true`; optional speaker diarization is disabled by default.
+1. **Offline Yoruba/English transcription.** The AI engine embeds an int8 CTranslate2 conversion of `LyngualLabs/whisper-small-yoruba`. It runs without a paid transcription API, network model download, or speaker diarization.
 2. **Structured clinical notes and SOAP draft.** Transcript processing is currently deterministic and rule-based, producing structured findings, confidence signals and an editable SOAP draft. It is not a paid generative AI call.
-3. **Paediatric dose safety and medication evidence.** The medication service retrieves curated evidence and applies explicit dose rules. The doctor-facing dose-check route calls `/rag/validate-dose`; unsafe or incomplete results require a documented clinician override. The current drug rule set is deliberately small and must be clinically governed and expanded before production use.
+3. **Paediatric dose safety and medication evidence.** The medication service retrieves curated evidence and applies explicit dose rules using the child’s age, weight, dose, frequency and route. It flags concerning or incomplete orders for clinician review; it never prescribes or blocks the doctor’s clinical judgement. The current drug rule set is deliberately small and must be clinically governed and expanded before production use.
 
-The original doctor consultation screen is connected to transcript-to-SOAP and the dose check. The newer prescribing/order workflow still needs the same guard integrated before it is feature-complete.
+The doctor consultation workflow is connected to transcript-to-SOAP and dose checking. All AI output remains an editable decision-support aid, with final clinical responsibility held by the authenticated clinician.
 
 ## Architecture
 
@@ -50,7 +50,7 @@ For an offline/on-premises hospital deployment, the same backend can use self-ma
 
 1. Configure the backend and AI environment files from their `.env.example` files. Use a strong, matching `AI_ENGINE_TOKEN`; it is an internal service token, not an OpenAI key.
 2. Set `DATABASE_URL` to PostgreSQL, create the legacy baseline once with `python database/schema.py`, then apply reviewed migrations with `python -m database.migrate`.
-3. Ensure the Yoruba Whisper snapshot is local. Set `ASR_MODEL_PATH` to its snapshot folder if it is not in the standard Hugging Face cache.
+3. Build the AI engine image. Its Docker build converts and embeds the approved Yoruba Whisper checkpoint. No local Hugging Face cache is required at runtime.
 4. Start the AI engine on port 8001, backend on port 8000, and frontend on port 5173.
 
 ```powershell
@@ -73,8 +73,4 @@ deployment-ready until every listed staging check has evidence of completion.
 - Validate ASR with representative Nigerian English and Yoruba recordings before clinical rollout.
 - Clinical leadership must approve every dosage rule, source document, alert threshold, and override policy.
 - Deploy HTTPS, managed secrets, encrypted backups, least-privilege database roles, MFA, session expiry, immutable audit retention, and tested disaster recovery.
-- The app currently has legacy direct-Supabase nurse screens; move those remaining reads/writes behind the backend before production.
-
-Deployment configuration updated.
-CORS deployment trigger.
-Release update.
+- Review every role workflow with clinical users before patient-data rollout, including the remaining legacy nurse data paths.

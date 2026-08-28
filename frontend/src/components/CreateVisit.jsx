@@ -103,7 +103,7 @@ const CreateVisit = () => {
         </p>
       </div>
 
-      {/* 1️⃣ Retrieve Patient Record - Search */}
+      {/* Retrieve patient record */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
           <h3 className="font-semibold text-gray-800 flex items-center gap-2">
@@ -228,7 +228,7 @@ const CreateVisit = () => {
         </div>
       )}
 
-      {/* 2️⃣ & 3️⃣ Create Visit + Optional Fields */}
+      {/* Visit details and optional fields */}
       {selectedPatient && !visitCreated && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
@@ -282,7 +282,7 @@ const CreateVisit = () => {
         </div>
       )}
 
-      {/* 4️⃣ Visit Created - Success State */}
+      {/* Visit created confirmation */}
       {visitCreated && (
         <div className="bg-white rounded-xl border-2 border-green-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 bg-green-50 border-b border-green-200">

@@ -11,8 +11,9 @@ This service is a decision-support tool. It organizes and flags clinical informa
   - Transcript-to-structured data and SOAP note generation
   - Nurse-to-doctor handoff that merges vitals with narrative
 - ASR (Automatic Speech Recognition)
-  - Whisper-based transcription
-  - Speaker diarization using pyannote
+  - Offline int8 CTranslate2 transcription using the approved `LyngualLabs/whisper-small-yoruba` checkpoint
+  - Automatic Yoruba, English and mixed-language detection
+  - A single clinical-speaker stream; speaker diarization is intentionally not included in the compact production runtime
 - RAG medication guidance
   - Retrieve evidence from curated medication documents
   - Deterministic dose validation with safety checks
@@ -74,10 +75,10 @@ Do not expose the AI-engine port publicly in production.
 ## Environment variables
 
 - AI_ENGINE_TOKEN: token used to authorize ASR requests (required for ASR)
-- ASR_MODEL_ID: model identifier (defaults to `LyngualLabs/whisper-small-yoruba`)
-- ASR_MODEL_PATH: optional path to a complete local model directory
-- ASR_OFFLINE_ONLY: prevents Hugging Face downloads when `true` (the default)
-- ASR_ENABLE_DIARIZATION: enables pyannote only when it is already cached locally
+- ASR_MODEL_PATH: path to the embedded converted model (default: `/opt/models/yoruba-whisper-small-ct2`)
+- ASR_DEVICE: `cpu` for the compact deployment
+- ASR_COMPUTE_TYPE: `int8` for the compact deployment
+- ASR_ENABLE_DIARIZATION: retained for configuration compatibility but ignored by the compact production runtime
 
 
 ## Example requests
@@ -153,7 +154,7 @@ ai_engine/
 │   ├── api/
 │   │   ├── asr_api.py            # ASR endpoints
 │   │   └── rag_api.py            # RAG endpoints
-│   ├── asr/                      # Whisper + diarization
+│   ├── asr/                      # Compact offline Whisper runtime
 │   ├── nlp/
 │   │   ├── api/                  # NLP endpoints
 │   │   ├── models/               # Pydantic clinical schemas
@@ -162,6 +163,8 @@ ai_engine/
 │       ├── files/                # Medication knowledge sources
 │       └── ...
 ├── main.py                       # FastAPI app + model boot
+├── Dockerfile                    # Converts and embeds the model during image build
+├── fly.toml                      # Fly.io deployment configuration
 ├── requirements.txt
 └── README.md
 ```
@@ -176,9 +179,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8001
 ```
 
-Notes:
-- The default Yoruba Whisper model must be available locally; offline mode never downloads it.
-- GPU is used automatically if available; otherwise CPU is used.
+For the production-equivalent local test, build and run the Docker image. The image embeds the converted model and tokenizer, so it does not download model assets at startup.
 
 ## Testing
 
@@ -190,5 +191,5 @@ pytest
 
 - If ASR requests return 401 or 503, confirm `AI_ENGINE_TOKEN` is set and the Bearer token matches.
 - If NLP or RAG requests return 401, confirm they are being made by the backend with the configured internal service token.
-- If startup says the model is missing, set `ASR_MODEL_PATH` to the cached Yoruba model snapshot.
-- Diarization is disabled by default so transcription remains fully offline.
+- If startup says the model is missing, confirm the Docker build completed and `ASR_MODEL_PATH` points to the converted model directory.
+- The compact service runs on CPU with int8 quantization and intentionally has no speaker diarization.

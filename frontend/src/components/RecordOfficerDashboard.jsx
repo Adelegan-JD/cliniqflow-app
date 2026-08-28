@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Calendar,
   ClipboardList,
@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { toast } from "react-toastify";
 import { api } from "../utils/api";
-import { useAuth } from "../contexts/AuthContext";
 
 const emptyStats = {
   totalPatientsToday: 0,
@@ -29,17 +28,12 @@ const RecordOfficerDashboard = ({
   recentRegistrations = [],
   onLoadDashboard,
 }) => {
-  const { user: authUser } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [pidSearchValue, setPidSearchValue] = useState("");
   const [pidSearching, setPidSearching] = useState(false);
   const [pidPatient, setPidPatient] = useState(null);
   const [pidCreating, setPidCreating] = useState(false);
   const [pidError, setPidError] = useState("");
-
-  const displayName =
-    user?.name || authUser?.user_metadata?.name || authUser?.email || "User";
-  const firstName = useMemo(() => displayName.split(" ")[0], [displayName]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentDate(new Date()), 1000);
@@ -174,22 +168,22 @@ const RecordOfficerDashboard = ({
 
   return (
     <div className="space-y-6 lg:space-y-8">
-      <section className="rounded-3xl border border-blue-100 bg-linear-to-r from-blue-50 via-indigo-50 to-blue-100 p-6 text-blue-900 shadow-md shadow-blue-200/30">
+      <section className="rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-blue-700/80">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
               Record Officer Dashboard
             </p>
-            <h2 className="mt-2 text-2xl md:text-3xl font-semibold text-blue-900">
-              Welcome back, {firstName}
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900">
+              Registration workspace
             </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-800/85">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
               Focus on new registrations and returning patients. Create visits
               fast, keep the queue clean, and avoid duplicate records.
             </p>
           </div>
-          <div className="rounded-2xl border border-blue-200 bg-white/60 px-4 py-3 backdrop-blur-sm shadow-lg shadow-blue-100/20">
-            <div className="flex items-center gap-2 text-sm text-blue-800">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm text-slate-600">
               <Calendar size={16} />
               <span>
                 {currentDate.toLocaleDateString("en-US", {
@@ -200,7 +194,7 @@ const RecordOfficerDashboard = ({
                 })}
               </span>
             </div>
-            <div className="mt-2 flex items-center gap-2 text-2xl font-semibold text-blue-900">
+            <div className="mt-2 flex items-center gap-2 text-xl font-semibold text-slate-900">
               <Clock size={20} />
               <span>
                 {currentDate.toLocaleTimeString("en-US", {
